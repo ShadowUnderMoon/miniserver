@@ -4,6 +4,11 @@
 #include <socket_descriptor.h>
 class httpConn {
 
+public:
+    httpConn(ServerSocket&& sock, sockaddr_in addr) : sock_(std::move(sock)), addr_(addr) {
+        
+    }
+    inline static std::atomic<int> userCount;
 private:
     ServerSocket sock_;
     struct sockaddr_in addr_;

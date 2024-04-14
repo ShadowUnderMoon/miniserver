@@ -1,7 +1,10 @@
 #pragma once
 
+#include <cassert>
+#include <cerrno>
 #include <cstdint>
 #include <filesystem>
+#include <netinet/in.h>
 #include <spdlog/common.h>
 #include <string>
 #include <memory>
@@ -17,7 +20,7 @@
 #include <socket_descriptor.h>
 #include <epoller.h>
 #include <httpconn.h>
-
+#include <thread_pool.h>
 class WebServer {
 public:
     WebServer(
@@ -25,13 +28,15 @@ public:
         int sqlPort, std::string sqlUser, std::string sqlPwd, std::string dbName,
         int connPoolNum, int threadNum,
         bool openLog, spdlog::level::level_enum logLevel, int logQueSize):
-        ET_(ET) {
+        ET_(ET), tp_(std::make_shared<thread_pool>(10000, threadNum)) {
 
         auto currentDir = std::filesystem::current_path();
         initEventMode(ET_);
         ServerSocket listenSock;
-        listenSock.listenTo(port, 1000);
+        listenSock.listenTo(port, 10);
+        listenSock.setNonblock();
         listenFd_ = listenSock.get();
+        epoller_.addFd(listenFd_, listenEvent_);
 
         // log configuration
         spdlog::init_thread_pool(logQueSize, 1);
@@ -57,8 +62,8 @@ public:
     }
 
     void initEventMode(bool ET) {
-        listenEvent_ = EPOLLRDHUP;
-        connEvent_ = EPOLLONESHOT | EPOLLRDHUP;
+        listenEvent_ = EPOLLRDHUP | EPOLLIN;
+        connEvent_ = EPOLLONESHOT | EPOLLRDHUP | EPOLLIN | EPOLLOUT;
 
         if (ET) {
             listenEvent_ |= EPOLLET;
@@ -77,11 +82,14 @@ public:
                 if (fd == listenFd_) {
                     accept_();
                 } else if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
-                    close_();
+                    assert(users_.count(fd));
+                    close_(fd);
                 } else if (events & EPOLLIN) {
-                    read_();
+                    assert(users_.count(fd));
+                    read_(fd);
                 } else if (events & EPOLLOUT) {
-                    write_();
+                    assert(users_.count(fd));
+                    write_(fd);
                 } else {
                     logger_->error("Unexpected event");
                 }
@@ -90,31 +98,61 @@ public:
 
     }
 
+    void addClient_(int fd, sockaddr_in addr) {
+        ServerSocket sock(fd);
+        sock.setNonblock();
+        epoller_.addFd(fd, connEvent_);
+        users_[fd] = {std::move(sock), addr};
+        logger_->info("Client {} in", fd);
+    }
+
     void accept_() {
-        
+        struct sockaddr_in clientAddr;
+        socklen_t clientAddrLen = sizeof(clientAddr);
+        while (true) {
+            int clientSockfd = accept(listenFd_, (struct sockaddr*)&clientAddr, &clientAddrLen);
+            if (clientSockfd < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    return;
+                } else {
+                    throw std::system_error(errno, std::generic_category());
+                }
+            } else if (httpConn::userCount >= MAX_FD) {
+                // TODO send error
+                logger_->warn("Clients is full!");
+                return;
+            } else {
+                addClient_(clientSockfd, clientAddr);
+            }
+        }
     }
 
-    void close_() {
+    void close_(int fd) {
+        httpConn& http_conn = users_[fd];
+        epoller_.delFd(fd);
+        users_.erase(fd);
+    }
+
+    void read_(int fd) {
 
     }
 
-    void read_() {
-
-    }
-
-    void write_() {
+    void write_(int fd) {
 
     }
 
 private:
     int timeoutMS_;
     bool isClose_ = false;
+    std::shared_ptr<thread_pool> tp_;
     int listenFd_;
     Epoller epoller_;
     uint32_t listenEvent_;
     uint32_t connEvent_;
     bool ET_ = true;
+    static const int MAX_FD = 65536;
     std::filesystem::path currDir_;
     std::shared_ptr<spdlog::async_logger> logger_;
     std::unordered_map<int, httpConn> users_;
+    async_overflow_policy overflow_policy_;
 };

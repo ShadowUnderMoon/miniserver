@@ -14,10 +14,6 @@ private:
 
 public:
     ServerSocket() {
-        sockfd_ = socket(AF_INET, SOCK_STREAM, 0);
-        if (sockfd_ < 0) {
-            throw std::system_error(errno, std::generic_category());
-        }
     }
 
     ServerSocket(int sockfd): sockfd_(sockfd){
@@ -83,15 +79,7 @@ public:
         }
     }
 
-    static ServerSocket acceptConnection(const ServerSocket& listenfd) {
-        struct sockaddr_in clientAddr;
-        socklen_t clientAddrLen = sizeof(clientAddr);
-        int clientSockfd = accept(listenfd.get(), (struct sockaddr*)&clientAddr, &clientAddrLen);
-        if (clientSockfd < 0) {
-             throw std::system_error(errno, std::generic_category());
-        }
-        return std::move(ServerSocket(clientSockfd));
-    }
+
 
     void setLingerOption(int lingerTime) {
         struct linger ling;
