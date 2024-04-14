@@ -2,6 +2,9 @@
 
 #include <netinet/in.h>
 #include <socket_descriptor.h>
+
+#include <buffer.h>
+
 class httpConn {
 
 public:
@@ -18,4 +21,6 @@ private:
     int iovCnt_;
     struct iovec iov_[2];
 
+    Buffer readBuff_;
+    Buffer writeBuff_;
 };
