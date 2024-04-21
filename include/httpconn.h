@@ -8,19 +8,20 @@
 class httpConn {
 
 public:
-    httpConn(ServerSocket&& sock, sockaddr_in addr) : sock_(std::move(sock)), addr_(addr) {
+    httpConn() {}
+    httpConn(ServerSocket&& sock, sockaddr_in addr) : sock(std::move(sock)), addr(addr) {
         
     }
     inline static std::atomic<int> userCount;
 private:
-    ServerSocket sock_;
-    struct sockaddr_in addr_;
+    ServerSocket sock;
+    struct sockaddr_in addr;
 
-    bool isClose_;
+    bool isClose;
 
-    int iovCnt_;
-    struct iovec iov_[2];
+    int iovCnt;
+    struct iovec iov[2];
 
-    Buffer readBuff_;
-    Buffer writeBuff_;
+    Buffer readBuff;
+    Buffer writeBuff;
 };

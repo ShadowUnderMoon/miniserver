@@ -1,33 +1,32 @@
 #pragma once
 #include <asm-generic/socket.h>
+#include <fcntl.h>
+#include <netinet/in.h> // For sockaddr_in
 #include <spdlog/spdlog.h>
+#include <sys/socket.h> // For socket, bind, listen, accept
 #include <system_error>
 #include <unistd.h> // For close()
-#include <stdexcept> // For std::runtime_error
-#include <sys/socket.h> // For socket, bind, listen, accept
-#include <netinet/in.h> // For sockaddr_in
-#include <fcntl.h>
 
 class ServerSocket {
 private:
-    int sockfd_ = -1;
+    int sockfd = -1;
 
 public:
     ServerSocket() {
     }
 
-    ServerSocket(int sockfd): sockfd_(sockfd){
+    explicit ServerSocket(int sockfd): sockfd(sockfd){
     }
 
-    ServerSocket(ServerSocket&& other) noexcept : sockfd_(other.sockfd_) {
-        other.sockfd_ = -1;
+    ServerSocket(ServerSocket&& other) noexcept : sockfd(other.sockfd) {
+        other.sockfd = -1;
     }
 
     ServerSocket& operator=(ServerSocket&& other) noexcept {
         if (this != &other) {
             close();
-            sockfd_ = other.sockfd_;
-            other.sockfd_ = -1;
+            sockfd = other.sockfd;
+            other.sockfd = -1;
         }
         return *this;
     }
@@ -37,9 +36,9 @@ public:
     }
 
     void close() noexcept {
-        if (sockfd_ != -1) {
+        if (sockfd != -1) {
             try {
-                int res = ::close(sockfd_);
+                int res = ::close(sockfd);
                 if (res < 0) {
                     throw std::system_error(errno, std::generic_category());
                 }
@@ -47,19 +46,19 @@ public:
             catch (const std::system_error& ex) {
                 spdlog::get("miniserver")->error("{}, {}", ex.code().value(), ex.what());
             }
-            sockfd_ = -1;
+            sockfd = -1;
         }
     }
 
     int get() const {
-        return sockfd_;
+        return sockfd;
     }
 
     bool isValid() const {
-        return sockfd_ != -1;
+        return sockfd != -1;
     }
 
-    void listenTo(int port, int max_established_sock) {
+    void listenTo(int port, int max_established_sock) const {
         struct sockaddr_in serverAddr;
         serverAddr.sin_family = AF_INET;
         serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -68,31 +67,31 @@ public:
         setLingerOption(2);
         setNonblock();
         int optval = 1;
-        if (setsockopt(sockfd_, SOL_SOCKET, SO_REUSEADDR, (const void*)&optval, sizeof(int)) < 0) {
+        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const void*)&optval, sizeof(int)) < 0) {
             throw std::system_error(errno, std::generic_category());
         }
-        if (bind(sockfd_, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
+        if (bind(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
             throw std::system_error(errno, std::generic_category());
         }
-        if (listen(sockfd_, max_established_sock) < 0) {
+        if (listen(sockfd, max_established_sock) < 0) {
             throw std::system_error(errno, std::generic_category());
         }
     }
 
 
 
-    void setLingerOption(int lingerTime) {
+    void setLingerOption(int lingerTime) const {
         struct linger ling;
         ling.l_onoff = 1;
         ling.l_linger = lingerTime;
 
-        if (setsockopt(sockfd_, SOL_SOCKET, SO_LINGER, &ling, sizeof(ling)) < 0) {
+        if (setsockopt(sockfd, SOL_SOCKET, SO_LINGER, &ling, sizeof(ling)) < 0) {
             throw std::system_error(errno, std::generic_category());
         }
     }
 
-    void setNonblock() {
-        if (fcntl(sockfd_, F_SETFL, fcntl(sockfd_, F_GETFD, 0) | O_NONBLOCK) < 0) {
+    void setNonblock() const {
+        if (fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFD, 0) | O_NONBLOCK) < 0) {
             throw std::system_error(errno, std::generic_category());
         }
     }

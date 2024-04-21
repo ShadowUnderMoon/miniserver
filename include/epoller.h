@@ -3,47 +3,47 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <sys/epoll.h>
+#include <system_error>
 #include <unistd.h>
 #include <vector>
-#include <system_error>
-#include <sys/epoll.h>
 
 class Epoller {
 public:
-    explicit Epoller(int maxEvent = 1024): epollFd_(epoll_create(512)), events_(maxEvent) {
-        assert(epollFd_ >= 0 && events_.size() > 0);
+    explicit Epoller(int maxEvent = 1024): epollFd(epoll_create(512)), events(maxEvent) {
+        assert(epollFd >= 0 && !events.empty());
     }
     ~Epoller() {
-        close(epollFd_);
+        close(epollFd);
     }
 
-    void addFd(int fd, uint32_t events) {
+    void addFd(int fd, uint32_t events) const {
         epoll_event ev = {};
         ev.data.fd = fd;
         ev.events = events;
-        if (epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev) < 0) {
+        if (epoll_ctl(epollFd, EPOLL_CTL_ADD, fd, &ev) < 0) {
             throw std::system_error(errno, std::generic_category());
         }
     }
 
-    void modFd(int fd, uint32_t events) {
+    void modFd(int fd, uint32_t events) const {
         epoll_event ev = {};
         ev.data.fd = fd;
         ev.events = events;
-        if (epoll_ctl(epollFd_, EPOLL_CTL_MOD, fd, &ev) < 0) {
+        if (epoll_ctl(epollFd, EPOLL_CTL_MOD, fd, &ev) < 0) {
             throw std::system_error(errno, std::generic_category());
         }
     }
 
-    void delFd(int fd) {
+    void delFd(int fd) const {
         epoll_event ev = {};
-        if (epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, &ev) < 0) {
+        if (epoll_ctl(epollFd, EPOLL_CTL_DEL, fd, &ev) < 0) {
             throw std::system_error(errno, std::generic_category());
         }
     }
 
     int wait(int timeoutMs = -1) {
-        int res = epoll_wait(epollFd_, events_.data(), static_cast<int>(events_.size()), timeoutMs);
+        int res = epoll_wait(epollFd, events.data(), static_cast<int>(events.size()), timeoutMs);
         if (res < 0) {
             throw std::system_error(errno, std::generic_category());
         }
@@ -51,13 +51,13 @@ public:
     }
 
     int getEventFd(size_t i) const {
-        return events_[i].data.fd;
+        return events[i].data.fd;
     }
 
     uint32_t getEvents(size_t i) const {
-        return events_[i].events;
+        return events[i].events;
     }
 private:
-    int epollFd_;
-    std::vector<struct epoll_event> events_;
+    int epollFd;
+    std::vector<struct epoll_event> events;
 };

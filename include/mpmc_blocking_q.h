@@ -12,91 +12,91 @@ public:
     friend class thread_pool;
     using item_type = T;
     explicit mpmc_blocking_queue(size_t max_items)
-        : max_items_(max_items) {}
+        : max_items(max_items) {}
 
     void enqueue(T&& item) {
         {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-            pop_cv_.wait(lock, [this] { return this->q_.size() != max_items_; });
-            q_.push(std::move(item));
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            pop_cv.wait(lock, [this] { return this->q.size() != max_items; });
+            q.push(std::move(item));
         }
-        push_cv_.notify_one();
+        push_cv.notify_one();
     }
 
     void enqueue_nowait(T&& item) {
         {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-            if (q_.size() == max_items_ && q_.size() > 0) {
-                q_.pop();
-                ++overrun_counter_;
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            if (q.size() == max_items && q.size() > 0) {
+                q.pop();
+                ++m_overrun_counter;
             }
-            q_.push(std::move(item));
+            q.push(std::move(item));
         }
-        push_cv_.notify_one();
+        push_cv.notify_one();
     }
 
     void enqueue_if_have_room(T&& item) {
         bool pushed = false;
         {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-            if (q_.size() != max_items_) {
-                q_.push(std::move(item));
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            if (q.size() != max_items) {
+                q.push(std::move(item));
                 pushed = true;
             }
         }
         if (pushed) {
-            push_cv_.notify_one();
+            push_cv.notify_one();
         } else {
-            ++discard_counter_;
+            ++m_discard_counter;
         }
     }
 
     bool dequeue_for(T& popped_item, std::chrono::milliseconds wait_duration) {
         {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-            if (!push_cv_.wait_for(lock, wait_duration, [this] { return !q_.empty(); })) {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            if (!push_cv.wait_for(lock, wait_duration, [this] { return !q.empty(); })) {
                 return false;
             }
-            popped_item = std::move(q_.front());
-            q_.pop();
+            popped_item = std::move(q.front());
+            q.pop();
         }
-        pop_cv_.notify_one();
+        pop_cv.notify_one();
         return true;
     }
 
     void dequeue(T& popped_item) {
         {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-            push_cv_.wait(lock, [this] { return !q_.empty(); });
-            popped_item = std::move(q_.front());
-            q_.pop();
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            push_cv.wait(lock, [this] { return !q.empty(); });
+            popped_item = std::move(q.front());
+            q.pop();
         }
-        pop_cv_.notify_one();
+        pop_cv.notify_one();
     }
 
     size_t overrun_counter() {
-        return overrun_counter_ .load(std::memory_order_relaxed);
+        return m_overrun_counter .load(std::memory_order_relaxed);
     }
     size_t discard_counter() {
-        return discard_counter_.load(std::memory_order_relaxed);
+        return m_discard_counter.load(std::memory_order_relaxed);
     }
     size_t size() {
-        std::unique_lock<std::mutex> lock(queue_mutex_);
-        return q_.size();
+        std::unique_lock<std::mutex> lock(queue_mutex);
+        return q.size();
     }
     void reset_overrun_counter() {
-        overrun_counter_.store(0, std::memory_order_relaxed);
+        m_overrun_counter.store(0, std::memory_order_relaxed);
     }
     void reset_discard_counter() {
-        discard_counter_.store(0, std::memory_order_relaxed);
+        m_discard_counter.store(0, std::memory_order_relaxed);
     }
 private:
-    std::mutex queue_mutex_;
-    std::condition_variable push_cv_;
-    std::condition_variable pop_cv_;
-    std::queue<T> q_;
-    size_t max_items_{0};
-    std::atomic<size_t> discard_counter_{0};
-    std::atomic<size_t> overrun_counter_{0};
+    std::mutex queue_mutex;
+    std::condition_variable push_cv;
+    std::condition_variable pop_cv;
+    std::queue<T> q;
+    size_t max_items{0};
+    std::atomic<size_t> m_discard_counter{0};
+    std::atomic<size_t> m_overrun_counter{0};
     
 };
