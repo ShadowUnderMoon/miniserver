@@ -12,10 +12,18 @@ private:
     int sockfd = -1;
 
 public:
-    ServerSocket() {
+    ServerSocket(): sockfd(get_new_scoket()){
     }
 
     explicit ServerSocket(int sockfd): sockfd(sockfd){
+    }
+
+    static int get_new_scoket() {
+        int fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (fd < 0) {
+            throw std::system_error(errno, std::generic_category());
+        }
+        return fd;
     }
 
     ServerSocket(ServerSocket&& other) noexcept : sockfd(other.sockfd) {
@@ -32,6 +40,7 @@ public:
     }
 
     ~ServerSocket() {
+        spdlog::get("miniserver")->info("close the socket");
         close();
     }
 

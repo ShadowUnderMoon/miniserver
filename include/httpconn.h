@@ -9,12 +9,12 @@ class httpConn {
 
 public:
     httpConn() {}
-    httpConn(ServerSocket&& sock, sockaddr_in addr) : sock(std::move(sock)), addr(addr) {
+    httpConn(std::unique_ptr<ServerSocket> sock, sockaddr_in addr) : sock(std::move(sock)), addr(addr) {
         
     }
     inline static std::atomic<int> userCount;
 private:
-    ServerSocket sock;
+    std::unique_ptr<ServerSocket> sock;
     struct sockaddr_in addr;
 
     bool isClose;

@@ -10,8 +10,11 @@
 
 class Epoller {
 public:
-    explicit Epoller(int maxEvent = 1024): epollFd(epoll_create(512)), events(maxEvent) {
-        assert(epollFd >= 0 && !events.empty());
+    explicit Epoller(int maxEvent = 1024): events(maxEvent) {
+        epollFd = epoll_create1(0);
+        if (epollFd < 0) {
+            throw std::system_error(errno, std::generic_category());
+        }
     }
     ~Epoller() {
         close(epollFd);
@@ -58,6 +61,6 @@ public:
         return events[i].events;
     }
 private:
-    int epollFd;
+    int epollFd = -1;
     std::vector<struct epoll_event> events;
 };
