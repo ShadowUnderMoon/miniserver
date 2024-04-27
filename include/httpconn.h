@@ -1,11 +1,13 @@
 #pragma once
 
+#include "httprequest.h"
+#include "utils.h"
 #include <cstddef>
 #include <netinet/in.h>
 #include <socket_descriptor.h>
 #include <spdlog/spdlog.h>
 #include <buffer.h>
-
+#include <httpresponse.h>
 class HttpConn {
 
 public:
@@ -56,19 +58,45 @@ public:
         if (read_buff_.ReadableBytes() == 0) {
             return false;
         }
+        if (request_.Parse(read_buff_)) {
+            response_.Init(src_dir, request_.path(), request_.IsKeepAlive(), 200);
+        } else {
+            response_.Init(src_dir, request_.path(), false, 400);
+        }
+
+        response_.MakeResponse(write_buff_);
+        // response header
+        iov_[0].iov_base = const_cast<char*>(write_buff_.Peak());
+        iov_[0].iov_len = write_buff_.ReadableBytes();
+        iov_cnt_ = 1;
+        // response body
+        if (response_.FileLen() > 0 && response_.File()) {
+            iov_[1].iov_base = response_.File();
+            iov_[1].iov_len = response_.FileLen();
+            iov_cnt_ = 2;
+        }
+        return true;
+    }
+
+    bool Echo() {
+        if (read_buff_.ReadableBytes() == 0) {
+            return false;
+        }
         std::string read_data = read_buff_.RetrieveAllToStr();
+        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), EscapeString(read_data));
         write_buff_.Append(read_data);    
-        iov_[0].iov_base = write_buff_.Peak();
+        iov_[0].iov_base = const_cast<char*>(write_buff_.Peak());
         iov_[0].iov_len = write_buff_.ReadableBytes();
         iov_cnt_ = 1;
         return true;
     }
-
     int GetFd() {
         return sock_->get();
     }
 public:
     inline static bool isET = true;
+    inline static std::string src_dir;
+    inline static std::atomic<int> user_count = 0;
 private:
     std::unique_ptr<ServerSocket> sock_;
     struct sockaddr_in addr_;
@@ -80,4 +108,7 @@ private:
 
     Buffer read_buff_;
     Buffer write_buff_;
+    
+    HttpRequest request_;
+    HttpResponse response_;
 };

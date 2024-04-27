@@ -28,6 +28,7 @@ class WebServer {
         bool ET,
         int /*timeoutMs*/,
         bool optLinger,
+        std::string work_dir,
         int /*sqlPort*/,
         const std::string & /*sqlUser*/,
         const std::string & /*sqlPwd*/,
@@ -38,7 +39,7 @@ class WebServer {
         spdlog::level::level_enum logLevel,
         int logQueSize)
         : isET_(ET), tp_(std::make_shared<thread_pool>(10000, threadNum)) {
-        auto currentDir = std::filesystem::current_path();
+        HttpConn::src_dir = work_dir + "/resources";
         initEventMode(ET);
         listen_sock_ =
             std::make_unique<ServerSocket>(ServerSocket::get_new_scoket());
@@ -54,7 +55,7 @@ class WebServer {
             "logs/miniserver.log", true);
         std::vector<spdlog::sink_ptr> sinks{stdout_sink, file_sink};
         logger_ = std::make_shared<spdlog::async_logger>(
-            "miniserver", sinks.begin(), sinks.end(), spdlog::thread_pool(),
+            "miniserver", sinks.begin(), sinks.end(), spdlog::thread_pool(),    
             spdlog::async_overflow_policy::block);
         logger_->set_pattern("%l %Y-%m-%d %H:%M:%S.%e [%s:%#:%!] %^%v%$");
         if (!openLog) {
@@ -65,12 +66,14 @@ class WebServer {
         spdlog::register_logger(logger_);
         SPDLOG_LOGGER_INFO(logger_, "hello");
         SPDLOG_LOGGER_INFO(logger_, "MiniServer Configuration:");
-        SPDLOG_LOGGER_INFO(logger_, "port: {}, ET: {}, linger: {}", port, ET, optLinger);
-        SPDLOG_LOGGER_INFO(logger_, 
-            "logLevel: {}, logQueueSize: {}",
+        SPDLOG_LOGGER_INFO(
+            logger_, "port: {}, ET: {}, linger: {}, curSrc: {}", port, ET, optLinger, HttpConn::src_dir);
+        SPDLOG_LOGGER_INFO(
+            logger_, "logLevel: {}, logQueueSize: {}",
             magic_enum::enum_name(logger_->level()), logQueSize);
-        SPDLOG_LOGGER_INFO(logger_, 
-            "SqlConnPool: {}, ThreadPoolNum: {}", connPoolNum, threadNum);
+        SPDLOG_LOGGER_INFO(
+            logger_, "SqlConnPool: {}, ThreadPoolNum: {}", connPoolNum,
+            threadNum);
     }
 
     ~WebServer() { SPDLOG_LOGGER_INFO(logger_, "MiniServer End!"); }
@@ -88,12 +91,13 @@ class WebServer {
     }
 
     void Start() {
+        
         SPDLOG_LOGGER_INFO(logger_, "MiniServer Start!");
 
         while (!is_close_) {
             int eventCnt = epoller_.Wait(-1);
             if (eventCnt < 0) {
-                throw std::system_error(errno,std::generic_category());
+                throw std::system_error(errno, std::generic_category());
             }
             for (int i = 0; i < eventCnt; i++) {
                 int fd = epoller_.GetEventFd(i);
@@ -121,10 +125,11 @@ class WebServer {
         sock->setNonblock();
         epoller_.AddFd(fd, conn_event_ | EPOLLIN);
         user_[fd] = {std::move(sock), addr};
-        SPDLOG_LOGGER_INFO(logger_, "Client {}:{} in", fd, sockaddrToString(addr));
+        SPDLOG_LOGGER_INFO(
+            logger_, "Client {}:{} in", fd, sockaddrToString(addr));
     }
 
-    static std::string sockaddrToString(const struct sockaddr_in& addr) {
+    static std::string sockaddrToString(const struct sockaddr_in &addr) {
         char ipstr[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &(addr.sin_addr), ipstr, INET_ADDRSTRLEN);
         return std::string(ipstr);
@@ -157,28 +162,25 @@ class WebServer {
     }
 
     void DealRead(int fd) {
-        SPDLOG_LOGGER_INFO(logger_, "wait read message");
         OnRead(user_[fd]);
     }
 
-    void OnRead(HttpConn& client) {
+    void OnRead(HttpConn &client) {
         client.Read();
         OnProcess(client);
     }
 
-    void OnProcess(HttpConn& client) {
+    void OnProcess(HttpConn &client) {
         if (client.Process()) {
-            epoller_.ModFd(client.GetFd(),conn_event_ | EPOLLOUT);
+            epoller_.ModFd(client.GetFd(), conn_event_ | EPOLLOUT);
         } else {
             epoller_.ModFd(client.GetFd(), conn_event_ | EPOLLIN);
         }
     }
 
-    void DealWrite(int fd) {
-        OnWrite(user_[fd]);
-    }
+    void DealWrite(int fd) { OnWrite(user_[fd]); }
 
-    void OnWrite(HttpConn& client) {
+    void OnWrite(HttpConn &client) {
         client.Write();
         if (client.ToWriteBytes() == 0) {
             OnProcess(client);
@@ -187,8 +189,7 @@ class WebServer {
         epoller_.ModFd(client.GetFd(), conn_event_ | EPOLLOUT);
     }
 
-
-private:
+  private:
     int timeoutMS_;
     bool is_close_ = false;
     std::shared_ptr<thread_pool> tp_;

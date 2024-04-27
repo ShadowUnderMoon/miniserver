@@ -25,8 +25,12 @@ public:
         return buffer_.size() - writerIndex_;
     }
 
-    char* Peak() {
-        return const_cast<char*>(buffer_.data() + readerIndex_);
+    const char* Peak() {
+        return buffer_.data() + readerIndex_;
+    }
+
+    const char* BeginWrite() {
+        return buffer_.data() + writerIndex_;
     }
     size_t prependableBytes() const {
         return readerIndex_;
@@ -36,6 +40,9 @@ public:
         readerIndex_ += len;
     }
 
+    void RetrieveUntil(const char* end) {
+        Retrieve(end - Peak());
+    }
     void RetrieveAll() {
         readerIndex_ = 0;
         writerIndex_ = 0;
