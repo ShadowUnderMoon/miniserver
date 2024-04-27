@@ -19,6 +19,7 @@
 #include <epoller.h>
 #include <httpconn.h>
 #include <socket_descriptor.h>
+#include <sys/epoll.h>
 #include <thread_pool.h>
 class WebServer {
   public:
@@ -36,14 +37,14 @@ class WebServer {
         bool openLog,
         spdlog::level::level_enum logLevel,
         int logQueSize)
-        : ET(ET), tp(std::make_shared<thread_pool>(10000, threadNum)) {
+        : isET_(ET), tp_(std::make_shared<thread_pool>(10000, threadNum)) {
         auto currentDir = std::filesystem::current_path();
         initEventMode(ET);
-        listenSock =
+        listen_sock_ =
             std::make_unique<ServerSocket>(ServerSocket::get_new_scoket());
-        listenSock->listenTo(port, 10);
+        listen_sock_->listenTo(port, 10);
 
-        epoller.addFd(listenSock->get(), listenEvent);
+        epoller_.AddFd(listen_sock_->get(), listen_event_);
 
         // log configuration
         spdlog::init_thread_pool(logQueSize, 1);
@@ -52,72 +53,75 @@ class WebServer {
         auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
             "logs/miniserver.log", true);
         std::vector<spdlog::sink_ptr> sinks{stdout_sink, file_sink};
-        logger = std::make_shared<spdlog::async_logger>(
+        logger_ = std::make_shared<spdlog::async_logger>(
             "miniserver", sinks.begin(), sinks.end(), spdlog::thread_pool(),
             spdlog::async_overflow_policy::block);
+        logger_->set_pattern("%l %Y-%m-%d %H:%M:%S.%e [%s:%#:%!] %^%v%$");
         if (!openLog) {
-            logger->set_level(spdlog::level::off);
+            logger_->set_level(spdlog::level::off);
         } else {
-            logger->set_level(logLevel);
+            logger_->set_level(logLevel);
         }
-        spdlog::register_logger(logger);
-        logger = std::move(logger);
-        logger->info("MiniServer Configuration:");
-        logger->info("port: {}, ET: {}, linger: {}", port, ET, optLinger);
-        logger->info(
+        spdlog::register_logger(logger_);
+        SPDLOG_LOGGER_INFO(logger_, "hello");
+        SPDLOG_LOGGER_INFO(logger_, "MiniServer Configuration:");
+        SPDLOG_LOGGER_INFO(logger_, "port: {}, ET: {}, linger: {}", port, ET, optLinger);
+        SPDLOG_LOGGER_INFO(logger_, 
             "logLevel: {}, logQueueSize: {}",
-            magic_enum::enum_name(logger->level()), logQueSize);
-        logger->info(
+            magic_enum::enum_name(logger_->level()), logQueSize);
+        SPDLOG_LOGGER_INFO(logger_, 
             "SqlConnPool: {}, ThreadPoolNum: {}", connPoolNum, threadNum);
     }
 
-    ~WebServer() { logger->info("MiniServer End!"); }
+    ~WebServer() { SPDLOG_LOGGER_INFO(logger_, "MiniServer End!"); }
 
     void initEventMode(bool ET) {
-        listenEvent = EPOLLRDHUP | EPOLLIN;
-        connEvent = EPOLLONESHOT | EPOLLRDHUP | EPOLLIN | EPOLLOUT;
+        listen_event_ = EPOLLRDHUP | EPOLLIN;
+        conn_event_ = EPOLLONESHOT | EPOLLRDHUP;
 
         if (ET) {
-            listenEvent |= EPOLLET;
-            connEvent |= EPOLLET;
+            listen_event_ |= EPOLLET;
+            conn_event_ |= EPOLLET;
         }
+
+        HttpConn::isET = (conn_event_ & EPOLLET);
     }
 
-    void start() {
-        logger->info("MiniServer Start!");
+    void Start() {
+        SPDLOG_LOGGER_INFO(logger_, "MiniServer Start!");
 
-        while (!isClose) {
-            int eventCnt = epoller.wait(-1);
+        while (!is_close_) {
+            int eventCnt = epoller_.Wait(-1);
             if (eventCnt < 0) {
                 throw std::system_error(errno,std::generic_category());
             }
             for (int i = 0; i < eventCnt; i++) {
-                int fd = epoller.getEventFd(i);
-                uint32_t events = epoller.getEvents(i);
-                if (fd == listenSock->get()) {
-                    accept();
+                int fd = epoller_.GetEventFd(i);
+                uint32_t events = epoller_.GetEvents(i);
+                if (fd == listen_sock_->get()) {
+                    DealListen();
                 } else if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
-                    assert(users.contains(fd));
-                    close(fd);
+                    assert(user_.contains(fd));
+                    CloseConn(fd);
                 } else if (events & EPOLLIN) {
-                    assert(users.contains(fd));
-                    read(fd);
+                    assert(user_.contains(fd));
+                    DealRead(fd);
                 } else if (events & EPOLLOUT) {
-                    assert(users.contains(fd));
-                    write(fd);
+                    assert(user_.contains(fd));
+                    DealWrite(fd);
                 } else {
-                    logger->error("Unexpected event");
+                    logger_->error("Unexpected event");
                 }
             }
         }
     }
 
-    void addClient(int fd, sockaddr_in addr) {
+    void AddClient(int fd, sockaddr_in addr) {
         auto sock = std::make_unique<ServerSocket>(fd);
         sock->setNonblock();
-        epoller.addFd(fd, connEvent);
-        users[fd] = {std::move(sock), addr};
-        logger->info("Client {}:{} in", fd, sockaddrToString(addr));
+        epoller_.AddFd(fd, conn_event_ | EPOLLIN);
+        user_[fd] = {std::move(sock), addr};
+        SPDLOG_LOGGER_INFO(logger_, "Client {}:{} in", fd, sockaddrToString(addr));
     }
 
     static std::string sockaddrToString(const struct sockaddr_in& addr) {
@@ -126,64 +130,76 @@ class WebServer {
         return std::string(ipstr);
     }
 
-    void accept() {
-        struct sockaddr_in clientAddr;
-        socklen_t clientAddrLen = sizeof(clientAddr);
+    void DealListen() {
+        struct sockaddr_in client_addr;
+        socklen_t client_addr_len = sizeof(client_addr);
         while (true) {
-            int clientSockfd = ::accept(
-                listenSock->get(), (struct sockaddr *)&clientAddr,
-                &clientAddrLen);
-            if (clientSockfd < 0) {
+            int client_fd = accept(
+                listen_sock_->get(), (struct sockaddr *)&client_addr,
+                &client_addr_len);
+            if (client_fd < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) { return; }
                 throw std::system_error(errno, std::generic_category());
             }
-            if (httpConn::userCount >= MAX_FD) {
+            if (HttpConn::userCount >= MAX_FD) {
                 // TODO send error
-                logger->warn("Clients is full!");
+                logger_->warn("Clients is full!");
                 return;
             }
-            addClient(clientSockfd, clientAddr);
+            AddClient(client_fd, client_addr);
         }
     }
 
-    void close(int fd) {
-        httpConn &http_conn = users[fd];
-        epoller.delFd(fd);
-        users.erase(fd);
+    void CloseConn(int fd) {
+        HttpConn &http_conn = user_[fd];
+        epoller_.DelFd(fd);
+        user_.erase(fd);
     }
 
-    void read(int fd) {
-        int BUFFER_SIZE = 200;
-        char buffer[BUFFER_SIZE];
-        int bytesRead = ::read(fd, buffer, sizeof(buffer));
-        if (bytesRead < 0) {
-           logger->info("read error");
-        }
+    void DealRead(int fd) {
+        SPDLOG_LOGGER_INFO(logger_, "wait read message");
+        OnRead(user_[fd]);
+    }
 
-        // 打印客户端发送的消息
-        std::cout << "Received message from client: " << buffer << std::endl;
+    void OnRead(HttpConn& client) {
+        client.Read();
+        OnProcess(client);
+    }
 
-        // 将收到的消息发送回客户端
-        int bytesSent = send(fd, buffer, bytesRead, 0);
-        if (bytesSent < 0) {
-            logger->info("write error");
+    void OnProcess(HttpConn& client) {
+        if (client.Process()) {
+            epoller_.ModFd(client.GetFd(),conn_event_ | EPOLLOUT);
+        } else {
+            epoller_.ModFd(client.GetFd(), conn_event_ | EPOLLIN);
         }
     }
 
-    void write(int fd) {}
+    void DealWrite(int fd) {
+        OnWrite(user_[fd]);
+    }
 
-  private:
-    int timeoutMS;
-    bool isClose = false;
-    std::shared_ptr<thread_pool> tp;
-    std::unique_ptr<ServerSocket> listenSock;
-    Epoller epoller;
-    uint32_t listenEvent;
-    uint32_t connEvent;
-    bool ET = true;
+    void OnWrite(HttpConn& client) {
+        client.Write();
+        if (client.ToWriteBytes() == 0) {
+            OnProcess(client);
+            return;
+        }
+        epoller_.ModFd(client.GetFd(), conn_event_ | EPOLLOUT);
+    }
+
+
+private:
+    int timeoutMS_;
+    bool is_close_ = false;
+    std::shared_ptr<thread_pool> tp_;
+    std::unique_ptr<ServerSocket> listen_sock_;
+    Epoller epoller_;
+    uint32_t listen_event_;
+    uint32_t conn_event_;
+    bool isET_ = true;
     static const int MAX_FD = 65536;
-    std::filesystem::path currDir;
-    std::shared_ptr<spdlog::async_logger> logger;
-    std::unordered_map<int, httpConn> users;
-    async_overflow_policy overflow_policy;
+    std::filesystem::path curr_dir_;
+    std::shared_ptr<spdlog::async_logger> logger_;
+    std::unordered_map<int, HttpConn> user_;
+    async_overflow_policy overflow_policy_;
 };

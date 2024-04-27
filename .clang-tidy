@@ -53,7 +53,7 @@ CheckOptions:
   - key:             readability-identifier-naming.PublicMemberSuffix
     value:           ''
   - key:             readability-identifier-naming.PrivateMemberSuffix
-    value:           ''
+    value:           '_'
   - key:             readability-identifier-naming.ProtectedMemberSuffix
     value:           ''
   - key:             readability-identifier-naming.MethodCase

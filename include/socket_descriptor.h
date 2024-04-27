@@ -40,7 +40,7 @@ public:
     }
 
     ~ServerSocket() {
-        spdlog::get("miniserver")->info("close the socket");
+        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "close the socket");
         close();
     }
 
@@ -53,7 +53,7 @@ public:
                 }
             }
             catch (const std::system_error& ex) {
-                spdlog::get("miniserver")->error("{}, {}", ex.code().value(), ex.what());
+                 SPDLOG_LOGGER_ERROR(spdlog::get("miniserver"), "{}, {}", ex.code().value(), ex.what());
             }
             sockfd = -1;
         }

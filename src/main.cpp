@@ -3,9 +3,9 @@
 #include <webserver.h>
 int main() {
     WebServer server(
-        8888, false, 60000, false,          // port, ET, timeoutMs, linger
+        8888, true, 60000, false,          // port, ET, timeoutMs, linger
         3306, "hanj", "user", "webserver", // mysql configuration
         12, 6, true, spdlog::level::debug, 1024);
 
-    server.start();
+    server.Start();
 }
