@@ -32,7 +32,7 @@ public:
 
     ServerSocket& operator=(ServerSocket&& other) noexcept {
         if (this != &other) {
-            close();
+            Close();
             sockfd = other.sockfd;
             other.sockfd = -1;
         }
@@ -40,11 +40,11 @@ public:
     }
 
     ~ServerSocket() {
-        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "close the socket");
-        close();
+        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "close socket: {}", sockfd);
+        Close();
     }
 
-    void close() noexcept {
+    void Close() noexcept {
         if (sockfd != -1) {
             try {
                 int res = ::close(sockfd);

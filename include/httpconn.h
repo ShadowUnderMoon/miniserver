@@ -39,7 +39,7 @@ public:
                 throw std::system_error(errno,std::generic_category());
             }
             if (len > iov_[0].iov_len) {
-                iov_[1].iov_base = (uint8_t*)iov_[1].iov_base+  (len - iov_[0].iov_len);
+                iov_[1].iov_base = (uint8_t*)iov_[1].iov_base +  (len - iov_[0].iov_len);
                 iov_[1].iov_len -= (len - iov_[0].iov_len);
                 if (iov_[0].iov_len) {
                     write_buff_.RetrieveAll();
@@ -54,11 +54,18 @@ public:
 
         return len;
     }
+
+    bool IsKeepAlive() const {
+        return request_.IsKeepAlive();
+    }
+
     bool Process() {
+        request_.Init();
         if (read_buff_.ReadableBytes() == 0) {
             return false;
         }
         if (request_.Parse(read_buff_)) {
+            SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), request_.path());
             response_.Init(src_dir, request_.path(), request_.IsKeepAlive(), 200);
         } else {
             response_.Init(src_dir, request_.path(), false, 400);
@@ -75,6 +82,7 @@ public:
             iov_[1].iov_len = response_.FileLen();
             iov_cnt_ = 2;
         }
+        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "filesize: {}, iovCnt: {}, Total: {} Bytes", response_.FileLen(), iov_cnt_, ToWriteBytes());
         return true;
     }
 

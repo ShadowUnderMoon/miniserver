@@ -21,6 +21,7 @@
 #include <socket_descriptor.h>
 #include <sys/epoll.h>
 #include <thread_pool.h>
+#include <unistd.h>
 class WebServer {
   public:
     WebServer(
@@ -103,15 +104,19 @@ class WebServer {
                 int fd = epoller_.GetEventFd(i);
                 uint32_t events = epoller_.GetEvents(i);
                 if (fd == listen_sock_->get()) {
+                    SPDLOG_LOGGER_INFO(logger_, "LISTEN EVENT");
                     DealListen();
                 } else if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
                     assert(user_.contains(fd));
+                    SPDLOG_LOGGER_INFO(logger_, "ERROR/CLOSE EVENT: {}", fd);
                     CloseConn(fd);
                 } else if (events & EPOLLIN) {
                     assert(user_.contains(fd));
+                    SPDLOG_LOGGER_INFO(logger_, "READ EVENT: {}", fd);
                     DealRead(fd);
                 } else if (events & EPOLLOUT) {
                     assert(user_.contains(fd));
+                    SPDLOG_LOGGER_INFO(logger_, "WRITE EVENT: {}", fd);
                     DealWrite(fd);
                 } else {
                     logger_->error("Unexpected event");
@@ -138,7 +143,7 @@ class WebServer {
     void DealListen() {
         struct sockaddr_in client_addr;
         socklen_t client_addr_len = sizeof(client_addr);
-        while (true) {
+        do {
             int client_fd = accept(
                 listen_sock_->get(), (struct sockaddr *)&client_addr,
                 &client_addr_len);
@@ -147,12 +152,20 @@ class WebServer {
                 throw std::system_error(errno, std::generic_category());
             }
             if (HttpConn::userCount >= MAX_FD) {
-                // TODO send error
-                logger_->warn("Clients is full!");
+                SPDLOG_LOGGER_WARN(spdlog::get("miniserver"), "Client if full!");
+                SendError(client_fd, "Server Busy!");
                 return;
             }
             AddClient(client_fd, client_addr);
+        } while (listen_event_ & EPOLLET);
+    }
+
+    void SendError(int fd, const std::string& info) {
+        size_t ret = send(fd, info.data(), info.length(), 0);
+        if (ret < 0) {
+            SPDLOG_LOGGER_WARN(spdlog::get("miniserver"), "send error to client [{}] error!", fd);
         }
+        close(fd);
     }
 
     void CloseConn(int fd) {
@@ -183,7 +196,11 @@ class WebServer {
     void OnWrite(HttpConn &client) {
         client.Write();
         if (client.ToWriteBytes() == 0) {
-            OnProcess(client);
+            if (client.IsKeepAlive()) {
+                OnProcess(client);
+                return;
+            }
+            CloseConn(client.GetFd());
             return;
         }
         epoller_.ModFd(client.GetFd(), conn_event_ | EPOLLOUT);
