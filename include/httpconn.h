@@ -50,6 +50,7 @@ public:
                 iov_[0].iov_len -= len;
                 write_buff_.Retrieve(len);
             }
+            SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), "iov0: {}, iov1: {}", iov_[0].iov_len, iov_[1].iov_len);
         } while (isET || ToWriteBytes() > 10240);
 
         return len;

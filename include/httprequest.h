@@ -52,7 +52,7 @@ public:
         while (buff.ReadableBytes() && state_ != REQUEST_STATE::REQUEST_FINISH) {
             const char* line_end = std::search(buff.Peak(), buff.BeginWrite(), CRLF, CRLF + 2);
             std::string line(buff.Peak(), line_end);
-            SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), line);
+            SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), line);
             switch (state_) {
             case REQUEST_STATE::REQUEST_LINE:
                 if (!ParseRequestLine(line)) {

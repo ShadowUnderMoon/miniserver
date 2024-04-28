@@ -65,7 +65,7 @@ public:
     void AddStatusLine(Buffer& buff) {
         std::string status_text{getHTTPStatusText(code_)};
         status_text = "HTTP/1.1 " + std::to_string(code_) + " "+ status_text + "\r\n";
-        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), EscapeString(status_text));
+        SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), EscapeString(status_text));
         buff.Append(status_text);
     }
 
@@ -80,7 +80,7 @@ public:
         }
 
         header += "Content-type: " + GetFileType() + "\r\n";
-        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), EscapeString(header));
+        SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), EscapeString(header));
         buff.Append(header);
     }
 
@@ -100,7 +100,7 @@ public:
         mm_file_ = (char*) mmret;
         close(src_fd);
         std::string header = "Content-length: " + std::to_string(mm_file_stat_.st_size) + "\r\n\r\n"; 
-        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), EscapeString(header));
+        SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), EscapeString(header));
         buff.Append(header);
     }
     std::string GetFileType() {
