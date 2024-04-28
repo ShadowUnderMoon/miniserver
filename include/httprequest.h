@@ -122,10 +122,64 @@ public:
 
     void ParseBody(const std::string& line) {
         body_ = line;
-        // ParsePost();
+        ParsePost();
         state_ = REQUEST_STATE::REQUEST_FINISH;
     }
 
+    static std::string url_decode(const std::string& str) {
+        std::ostringstream decoded;
+        for (std::size_t i = 0; i < str.size(); ++i) {
+            if (str[i] == '%' && i + 2 < str.size()) {
+                int value;
+                std::istringstream hex(str.substr(i + 1, 2));
+                hex >> std::hex >> value;
+                decoded << static_cast<char>(value);
+                i += 2;
+            } else if (str[i] == '+') {
+                decoded << ' ';
+            } else {
+                decoded << str[i];
+            }
+        }
+        return decoded.str();
+    }
+
+    static std::unordered_map<std::string, std::string> parse_form_data(const std::string& data) {
+        std::unordered_map<std::string, std::string> result;
+        std::istringstream iss(data);
+        std::string pair;
+        while (std::getline(iss, pair, '&')) {
+            std::size_t pos = pair.find('=');
+            if (pos != std::string::npos) {
+                std::string key = pair.substr(0, pos);
+                std::string value = pair.substr(pos + 1);
+                key = url_decode(key);
+                value = url_decode(value);
+                result[key] = value;
+            }
+        }
+        return result;
+    }
+    void ParsePost() {
+        if (method_ == "POST" && header_["Content-Type"] == "application/x-www-form-urlencoded") {
+            post_ = parse_form_data(body_);
+            if (DEFAULT_HTML_TAG.contains(path_)) {
+                int tag = DEFAULT_HTML_TAG.at(path_);
+                if (tag == 0 || tag == 1) {
+                    bool isLogin = (tag == 1);
+                    if (UserVerify(post_["username"], post_["password"], isLogin)) {
+                        path_ = "/welcome.html";
+                    } else {
+                        path_ = "/error.html";
+                    }
+                }
+            }
+        }
+    }
+
+    static bool UserVerify(const std::string& name, const std::string& pwd, bool isLogin) {
+        return true;
+    }
     const std::string& path() const {
         return path_;
     }
