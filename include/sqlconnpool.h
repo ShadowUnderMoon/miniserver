@@ -1,6 +1,4 @@
 #pragma once
-#define MYSQLPP_MYSQL_HEADERS_BURIED
-
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -52,7 +50,6 @@ class MysqlConnectionPool {
             pool_.push_back(ConnectionInfo(Create()));
         }
         available_connections_ = initial_connections;
-        total_connections_ = initial_connections;
     }
 
     ~MysqlConnectionPool() {}
@@ -62,16 +59,15 @@ class MysqlConnectionPool {
         RemoveOldConnections_();
         cv_.wait(lock, [this] {
             return available_connections_ > 0
-                   || total_connections_ < max_connections_;
+                   || pool_.size() < max_connections_;
         });
         if (mysqlpp::Connection *mru = FindMru()) {
             available_connections_--;
             return mru;
         }
-        if (total_connections_ < max_connections_) {
+        if (pool_.size() < max_connections_) {
             pool_.push_back(ConnectionInfo(Create()));
             pool_.back().in_use = true;
-            total_connections_++;
             return pool_.back().conn.get();
         }
         return nullptr;
@@ -102,10 +98,6 @@ class MysqlConnectionPool {
         return available_connections_;
     }
 
-    size_t TotalConnections() const {
-        std::unique_lock<std::mutex> lock(mutex_);
-        return total_connections_;
-    }
 
     std::chrono::seconds MaxIdleTime() { return max_idle_time_; }
 
@@ -124,7 +116,6 @@ class MysqlConnectionPool {
         while (it != pool_.end()) {
             if (std::chrono::system_clock::now() - it->last_used
                 >= MaxIdleTime()) {
-                total_connections_--;
                 if (!it->in_use) { available_connections_--; }
                 pool_.erase(it++);
             } else {
@@ -168,7 +159,6 @@ class MysqlConnectionPool {
     int initial_connections_ = 0;
     int max_connections_ = 0;
     int available_connections_ = 0;
-    int total_connections_ = 0;
     std::list<ConnectionInfo> pool_;
     mutable std::mutex mutex_;
     std::condition_variable cv_;

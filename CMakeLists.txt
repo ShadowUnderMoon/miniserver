@@ -20,6 +20,7 @@ set(EXTRA_LIBRARIES
     mysqlpp
 )
 
+add_compile_definitions(MYSQLPP_MYSQL_HEADERS_BURIED)
 # file(GLOB SOURCES "src/*.cpp")
 # add_executable(miniserver ${SOURCES})
 # target_include_directories(miniserver PUBLIC include)
