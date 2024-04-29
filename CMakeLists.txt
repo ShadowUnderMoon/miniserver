@@ -17,7 +17,7 @@ find_package(magic_enum REQUIRED)
 set(EXTRA_LIBRARIES
     magic_enum::magic_enum
     spdlog::spdlog
-    mysqlclient
+    mysqlpp
 )
 
 # file(GLOB SOURCES "src/*.cpp")
