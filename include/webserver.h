@@ -22,6 +22,7 @@
 #include <sys/epoll.h>
 #include <thread_pool.h>
 #include <unistd.h>
+#include <sqlconnpool.h>
 class WebServer {
   public:
     WebServer(
@@ -30,10 +31,14 @@ class WebServer {
         int /*timeoutMs*/,
         bool optLinger,
         std::string work_dir,
-        int /*sqlPort*/,
-        const std::string & /*sqlUser*/,
-        const std::string & /*sqlPwd*/,
-        const std::string & /*dbName*/,
+        std::string db_name,
+        std::string db_server,
+        std::string db_user,
+        std::string db_password,
+        unsigned int db_port,
+        std::chrono::seconds db_max_idle_time,
+        int db_initial_connections,
+        int db_max_connections,
         int connPoolNum,
         int threadNum,
         bool openLog,
@@ -48,6 +53,9 @@ class WebServer {
 
         epoller_.AddFd(listen_sock_->get(), listen_event_);
 
+        MysqlConnectionPool::GetInstance().Init(
+            db_name, db_server, db_user, db_password, db_port, db_max_idle_time,
+            db_initial_connections, db_max_connections);
         // log configuration
         spdlog::init_thread_pool(logQueSize, 1);
         auto stdout_sink =
@@ -56,7 +64,7 @@ class WebServer {
             "logs/miniserver.log", true);
         std::vector<spdlog::sink_ptr> sinks{stdout_sink, file_sink};
         logger_ = std::make_shared<spdlog::async_logger>(
-            "miniserver", sinks.begin(), sinks.end(), spdlog::thread_pool(),    
+            "miniserver", sinks.begin(), sinks.end(), spdlog::thread_pool(),
             spdlog::async_overflow_policy::block);
         logger_->set_pattern("%l %Y-%m-%d %H:%M:%S.%e [%s:%#:%!] %^%v%$");
         if (!openLog) {
@@ -68,7 +76,11 @@ class WebServer {
         SPDLOG_LOGGER_INFO(logger_, "hello");
         SPDLOG_LOGGER_INFO(logger_, "MiniServer Configuration:");
         SPDLOG_LOGGER_INFO(
-            logger_, "port: {}, ET: {}, linger: {}, curSrc: {}", port, ET, optLinger, HttpConn::src_dir);
+            logger_, "port: {}, ET: {}, linger: {}, curSrc: {}", port, ET,
+            optLinger, HttpConn::src_dir);
+        SPDLOG_LOGGER_INFO(
+            logger_, "DB info: name: {}, server: {}, user: {}, port: {}, max_idle_time: {} s, initial connection: {}, max connection: {}",
+            db_name, db_server, db_user, db_port, db_max_idle_time.count(), db_initial_connections, db_max_connections);
         SPDLOG_LOGGER_INFO(
             logger_, "logLevel: {}, logQueueSize: {}",
             magic_enum::enum_name(logger_->level()), logQueSize);
@@ -92,7 +104,6 @@ class WebServer {
     }
 
     void Start() {
-        
         SPDLOG_LOGGER_INFO(logger_, "MiniServer Start!");
 
         while (!is_close_) {
@@ -152,7 +163,8 @@ class WebServer {
                 throw std::system_error(errno, std::generic_category());
             }
             if (HttpConn::userCount >= MAX_FD) {
-                SPDLOG_LOGGER_WARN(spdlog::get("miniserver"), "Client if full!");
+                SPDLOG_LOGGER_WARN(
+                    spdlog::get("miniserver"), "Client if full!");
                 SendError(client_fd, "Server Busy!");
                 return;
             }
@@ -160,10 +172,12 @@ class WebServer {
         } while (listen_event_ & EPOLLET);
     }
 
-    void SendError(int fd, const std::string& info) {
+    void SendError(int fd, const std::string &info) {
         size_t ret = send(fd, info.data(), info.length(), 0);
         if (ret < 0) {
-            SPDLOG_LOGGER_WARN(spdlog::get("miniserver"), "send error to client [{}] error!", fd);
+            SPDLOG_LOGGER_WARN(
+                spdlog::get("miniserver"), "send error to client [{}] error!",
+                fd);
         }
         close(fd);
     }
@@ -174,9 +188,7 @@ class WebServer {
         user_.erase(fd);
     }
 
-    void DealRead(int fd) {
-        OnRead(user_[fd]);
-    }
+    void DealRead(int fd) { OnRead(user_[fd]); }
 
     void OnRead(HttpConn &client) {
         client.Read();

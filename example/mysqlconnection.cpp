@@ -5,17 +5,22 @@
 #include <string>
 
 int main() {
-    MysqlConnectionPool connpool(
+    auto& connpool = MysqlConnectionPool::GetInstance();
+   connpool.Init(
         std::getenv("MINISERVER_DB_NAME"),
         std::getenv("MINISERVER_DB_HOST"),
         std::getenv("MINISERVER_DB_USER"),
         std::getenv("MINISERVER_DB_PASSWORD"),
         3306,
-        std::chrono::seconds(5),
+        std::chrono::seconds(3600),
         2,
         10
     );
-
+    
+    auto duration = std::chrono::seconds(3600);
+    spdlog::info("duration: {} s", duration.count());
+    spdlog::info("duration {} h", std::chrono::duration_cast<std::chrono::hours>(duration).count());
+    spdlog::info("{}", std::chrono::seconds(3).count());
     spdlog::info("connpool status: {}, {}", connpool.AvailableConnections(), connpool.Size());
     MySqlScopedConnection conn(connpool);
 

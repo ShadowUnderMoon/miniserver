@@ -1,4 +1,5 @@
 #pragma once
+#include "sqlconnpool.h"
 #include <regex>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -178,7 +179,42 @@ public:
     }
 
     static bool UserVerify(const std::string& name, const std::string& pwd, bool isLogin) {
-        return true;
+        SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), "name: {}, password: {}", name, pwd);
+        if (name.empty() || pwd.empty()) {
+            return false;
+        }
+        MySqlScopedConnection conn(MysqlConnectionPool::GetInstance());
+        auto query = conn->query();
+        query << "SELECT password FROM user WHERE username = " << mysqlpp::quote << name << " LIMIT 1";
+        mysqlpp::StoreQueryResult result = query.store();
+
+        if (result.num_rows() == 1) {
+            if (!isLogin) {
+                SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "User exsited");
+                return false;
+            }
+            mysqlpp::Row row = result[0];
+            std::string password = std::string(row["password"]);
+            
+            if (password == pwd) {
+                return true;
+            }
+            SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "password incorrect");
+            return false;
+        }
+        if (isLogin) {
+            SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "NOT FOUND");
+            return false;
+        }
+
+        query << "INSERT INTO user(username, password) VALUES(" << mysqlpp::quote << name
+                << ", " << mysqlpp::quote << pwd << ")";
+        if (query.execute()) {
+            SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "DB writed");
+            return true;
+        }
+        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "DB write failed");
+        return false;
     }
     const std::string& path() const {
         return path_;

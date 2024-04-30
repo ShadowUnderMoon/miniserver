@@ -29,7 +29,13 @@ class MySqlScopedConnection {
 
 class MysqlConnectionPool {
   public:
-    MysqlConnectionPool(
+    MysqlConnectionPool() = default;
+
+    static MysqlConnectionPool& GetInstance() {
+        static MysqlConnectionPool mysql_connection_pool;
+        return mysql_connection_pool;
+    }
+    void Init(
         std::string db_name,
         std::string server,
         std::string user,
@@ -38,14 +44,15 @@ class MysqlConnectionPool {
         std::chrono::seconds max_idle_time = std::chrono::seconds(3600),
         int initial_connections = 2,
         int max_connections = 10)
-        : db_name_(std::move(db_name))
-        , server_(std::move(server))
-        , user_(std::move(user))
-        , password_(std::move(password))
-        , port_(port)
-        , max_idle_time_(max_idle_time)
-        , initial_connections_(initial_connections)
-        , max_connections_(max_connections) {
+    {
+        db_name_ = std::move(db_name);
+        server_ = std::move(server);
+        user_ = std::move(user);
+        password_ = std::move(password);
+        port_ = port;
+        max_idle_time_ = max_idle_time;
+        initial_connections_ = initial_connections;
+        max_connections_ = max_connections;
         for (int i = 0; i < initial_connections; i++) {
             pool_.push_back(ConnectionInfo(Create()));
         }
