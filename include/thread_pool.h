@@ -73,8 +73,8 @@ public:
     thread_pool(const thread_pool &) = delete;
     thread_pool& operator=(thread_pool &&) = delete;
 
-    void post_log(std::function<void()>&& f,
-                  async_overflow_policy overflow_policy)
+    void add_task(std::function<void()>&& f,
+                  async_overflow_policy overflow_policy = async_overflow_policy::block)
     {
         async_msg async_m(std::move(f));
         post_async_msg(std::move(async_m), overflow_policy);

@@ -47,7 +47,7 @@ class WebServer {
         bool openLog,
         spdlog::level::level_enum logLevel,
         int logQueSize)
-        : isET_(ET), timeout_(timeout), tp_(std::make_shared<thread_pool>(10000, threadNum)) {
+        : isET_(ET), timeout_(timeout), threadpool_(std::make_unique<thread_pool>(10000, threadNum)) {
         HttpConn::src_dir = work_dir + "/resources";
         initEventMode(ET);
         listen_sock_ =
@@ -202,7 +202,8 @@ class WebServer {
         if (timeout_ > std::chrono::milliseconds(0)) {
             timer_.Extend(fd, timeout_);
         }
-        OnRead(user_[fd]); 
+        // OnRead(user_[fd]); 
+        threadpool_->add_task([this, fd] { OnRead(user_[fd]); });
     }
 
     void OnRead(HttpConn &client) {
@@ -222,7 +223,8 @@ class WebServer {
         if (timeout_ > std::chrono::milliseconds(0)) {
             timer_.Extend(fd, timeout_);
         }
-        OnWrite(user_[fd]);
+        threadpool_->add_task([this, fd] { OnWrite(user_[fd]); });
+        // OnWrite(user_[fd]);
     }
 
     void OnWrite(HttpConn &client) {
@@ -242,7 +244,7 @@ class WebServer {
     std::chrono::milliseconds timeout_;
     HeapTimer timer_;
     bool is_close_ = false;
-    std::shared_ptr<thread_pool> tp_;
+    std::unique_ptr<thread_pool> threadpool_;
     std::unique_ptr<ServerSocket> listen_sock_;
     Epoller epoller_;
     uint32_t listen_event_;
