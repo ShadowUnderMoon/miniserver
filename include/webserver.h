@@ -10,6 +10,7 @@
 #include <netinet/in.h>
 #include <ratio>
 #include <spdlog/common.h>
+#include <spdlog/logger.h>
 #include <string>
 #include "heaptimer.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
@@ -60,22 +61,24 @@ class WebServer {
             db_name, db_server, db_user, db_password, db_port, db_max_idle_time,
             db_initial_connections, db_max_connections);
         // log configuration
-        spdlog::init_thread_pool(logQueSize, 1);
-        auto stdout_sink =
-            std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-        auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
-            "logs/miniserver.log", true);
-        std::vector<spdlog::sink_ptr> sinks{stdout_sink, file_sink};
-        logger_ = std::make_shared<spdlog::async_logger>(
-            "miniserver", sinks.begin(), sinks.end(), spdlog::thread_pool(),
-            spdlog::async_overflow_policy::block);
-        logger_->set_pattern("%l %Y-%m-%d %H:%M:%S.%e [%s:%#:%!] %^%v%$");
-        if (!openLog) {
-            logger_->set_level(spdlog::level::off);
+
+        if (openLog) {
+            spdlog::init_thread_pool(logQueSize, 1);
+            auto stdout_sink =
+                std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+            auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+                "logs/miniserver.log", true);
+            std::vector<spdlog::sink_ptr> sinks{stdout_sink, file_sink};
+            logger_ = std::make_shared<spdlog::async_logger>(
+                "miniserver", sinks.begin(), sinks.end(), spdlog::thread_pool(),
+                spdlog::async_overflow_policy::block);
+            logger_->set_pattern("%l %Y-%m-%d %H:%M:%S.%e [%s:%#:%!] %^%v%$");
+            logger_->set_level(logLevel);
+            spdlog::register_logger(logger_);
         } else {
+            logger_ = spdlog::stdout_color_mt("miniserver");
             logger_->set_level(logLevel);
         }
-        spdlog::register_logger(logger_);
         SPDLOG_LOGGER_INFO(logger_, "hello");
         SPDLOG_LOGGER_INFO(logger_, "MiniServer Configuration:");
         SPDLOG_LOGGER_INFO(
@@ -195,7 +198,6 @@ class WebServer {
         if (timeout_ > std::chrono::milliseconds(0)) {
             timer_.Del(fd);
         }
-        close(fd);
     }
 
     void DealRead(int fd) {
@@ -252,7 +254,7 @@ class WebServer {
     bool isET_ = true;
     static const int MAX_FD = 65536;
     std::filesystem::path curr_dir_;
-    std::shared_ptr<spdlog::async_logger> logger_;
+    std::shared_ptr<spdlog::logger> logger_;
     std::unordered_map<int, HttpConn> user_;
     async_overflow_policy overflow_policy_;
 };

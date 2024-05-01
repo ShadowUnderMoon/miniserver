@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <climits>
 #include <cstddef>
+#include <spdlog/spdlog.h>
 #include <sys/types.h>
 #include <system_error>
 #include <vector>

@@ -47,7 +47,7 @@ public:
     void Close() noexcept {
         if (sockfd != -1) {
             try {
-                int res = ::close(sockfd);
+                int res = close(sockfd);
                 if (res < 0) {
                     throw std::system_error(errno, std::generic_category());
                 }
