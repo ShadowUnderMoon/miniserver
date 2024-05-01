@@ -46,6 +46,7 @@ class WebServer {
         int connPoolNum,
         int threadNum,
         bool openLog,
+        bool async_log,
         spdlog::level::level_enum logLevel,
         int logQueSize)
         : isET_(ET), timeout_(timeout), threadpool_(std::make_unique<thread_pool>(10000, threadNum)) {
@@ -63,18 +64,31 @@ class WebServer {
         // log configuration
 
         if (openLog) {
-            spdlog::init_thread_pool(logQueSize, 1);
-            auto stdout_sink =
-                std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-            auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
-                "logs/miniserver.log", true);
-            std::vector<spdlog::sink_ptr> sinks{stdout_sink, file_sink};
-            logger_ = std::make_shared<spdlog::async_logger>(
-                "miniserver", sinks.begin(), sinks.end(), spdlog::thread_pool(),
-                spdlog::async_overflow_policy::block);
-            logger_->set_pattern("%l %Y-%m-%d %H:%M:%S.%e [%s:%#:%!] %^%v%$");
-            logger_->set_level(logLevel);
-            spdlog::register_logger(logger_);
+            if (async_log) {
+                spdlog::init_thread_pool(logQueSize, 1);
+                auto stdout_sink =
+                    std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+                auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+                    "logs/miniserver.log", true);
+                std::vector<spdlog::sink_ptr> sinks{stdout_sink, file_sink};
+                logger_ = std::make_shared<spdlog::async_logger>(
+                    "miniserver", sinks.begin(), sinks.end(), spdlog::thread_pool(),
+                    spdlog::async_overflow_policy::block);
+                logger_->set_pattern("%l %Y-%m-%d %H:%M:%S.%e [%s:%#:%!] %^%v%$");
+                logger_->set_level(logLevel);
+                spdlog::register_logger(logger_);
+            } else {
+                auto stdout_sink =
+                    std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+                auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+                    "logs/miniserver.log", true);
+                std::vector<spdlog::sink_ptr> sinks{stdout_sink, file_sink};
+                logger_ = std::make_shared<spdlog::logger>(
+                    "miniserver", sinks.begin(), sinks.end());
+                logger_->set_pattern("%l %Y-%m-%d %H:%M:%S.%e [%s:%#:%!] %^%v%$");
+                logger_->set_level(logLevel);
+                spdlog::register_logger(logger_);
+            }
         } else {
             logger_ = spdlog::stdout_color_mt("miniserver");
             logger_->set_level(logLevel);
