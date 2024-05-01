@@ -2,13 +2,16 @@
 
 #include <cassert>
 #include <cerrno>
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
 #include <memory>
 #include <netinet/in.h>
+#include <ratio>
 #include <spdlog/common.h>
 #include <string>
+#include "heaptimer.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include <magic_enum.hpp>
 #include <spdlog/async.h>
@@ -28,7 +31,7 @@ class WebServer {
     WebServer(
         int port,
         bool ET,
-        int /*timeoutMs*/,
+        std::chrono::milliseconds timeout,
         bool optLinger,
         std::string work_dir,
         std::string db_name,
@@ -44,7 +47,7 @@ class WebServer {
         bool openLog,
         spdlog::level::level_enum logLevel,
         int logQueSize)
-        : isET_(ET), tp_(std::make_shared<thread_pool>(10000, threadNum)) {
+        : isET_(ET), timeout_(timeout), tp_(std::make_shared<thread_pool>(10000, threadNum)) {
         HttpConn::src_dir = work_dir + "/resources";
         initEventMode(ET);
         listen_sock_ =
@@ -107,7 +110,8 @@ class WebServer {
         SPDLOG_LOGGER_INFO(logger_, "MiniServer Start!");
 
         while (!is_close_) {
-            int eventCnt = epoller_.Wait(-1);
+            int timeMs = timeout_ == std::chrono::milliseconds(0) ? -1 : timer_.GetNextTick(); 
+            int eventCnt = epoller_.Wait(timeMs);
             if (eventCnt < 0) {
                 throw std::system_error(errno, std::generic_category());
             }
@@ -140,7 +144,10 @@ class WebServer {
         auto sock = std::make_unique<ServerSocket>(fd);
         sock->setNonblock();
         epoller_.AddFd(fd, conn_event_ | EPOLLIN);
-        user_[fd] = {std::move(sock), addr};
+        user_.emplace(fd, HttpConn(std::move(sock), addr));
+        if (timeout_ > std::chrono::milliseconds(0)) {
+            timer_.Add(fd, timeout_, [this, fd] { CloseConn(fd); });
+        }
         SPDLOG_LOGGER_INFO(
             logger_, "Client {}:{} in", fd, sockaddrToString(addr));
     }
@@ -162,7 +169,7 @@ class WebServer {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) { return; }
                 throw std::system_error(errno, std::generic_category());
             }
-            if (HttpConn::userCount >= MAX_FD) {
+            if (HttpConn::user_count >= MAX_FD) {
                 SPDLOG_LOGGER_WARN(
                     spdlog::get("miniserver"), "Client if full!");
                 SendError(client_fd, "Server Busy!");
@@ -183,12 +190,20 @@ class WebServer {
     }
 
     void CloseConn(int fd) {
-        HttpConn &http_conn = user_[fd];
         epoller_.DelFd(fd);
         user_.erase(fd);
+        if (timeout_ > std::chrono::milliseconds(0)) {
+            timer_.Del(fd);
+        }
+        close(fd);
     }
 
-    void DealRead(int fd) { OnRead(user_[fd]); }
+    void DealRead(int fd) {
+        if (timeout_ > std::chrono::milliseconds(0)) {
+            timer_.Extend(fd, timeout_);
+        }
+        OnRead(user_[fd]); 
+    }
 
     void OnRead(HttpConn &client) {
         client.Read();
@@ -203,7 +218,12 @@ class WebServer {
         }
     }
 
-    void DealWrite(int fd) { OnWrite(user_[fd]); }
+    void DealWrite(int fd) {
+        if (timeout_ > std::chrono::milliseconds(0)) {
+            timer_.Extend(fd, timeout_);
+        }
+        OnWrite(user_[fd]);
+    }
 
     void OnWrite(HttpConn &client) {
         client.Write();
@@ -219,7 +239,8 @@ class WebServer {
     }
 
   private:
-    int timeoutMS_;
+    std::chrono::milliseconds timeout_;
+    HeapTimer timer_;
     bool is_close_ = false;
     std::shared_ptr<thread_pool> tp_;
     std::unique_ptr<ServerSocket> listen_sock_;

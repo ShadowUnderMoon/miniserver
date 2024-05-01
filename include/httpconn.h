@@ -11,12 +11,15 @@
 class HttpConn {
 
 public:
-    HttpConn() {}
+    HttpConn() = default;
     HttpConn(std::unique_ptr<ServerSocket> sock, sockaddr_in addr) : sock_(std::move(sock)), addr_(addr) {
-        
+        user_count++;
     }
-    inline static std::atomic<int> userCount;
 
+    HttpConn(const HttpConn&) = delete;
+    HttpConn& operator=(const HttpConn&) = delete;
+    HttpConn(HttpConn&&) = default;
+    HttpConn& operator=(HttpConn&&) = default;
     ssize_t Read() {
         return read_buff_.ReadFd(sock_->get());
     }
@@ -103,6 +106,10 @@ public:
     }
     int GetFd() {
         return sock_->get();
+    }
+
+    ~HttpConn() {
+        user_count--;
     }
 public:
     inline static bool isET = true;

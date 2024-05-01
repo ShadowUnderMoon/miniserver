@@ -22,7 +22,7 @@ struct TimerNode {
 
 class HeapTimer {
 public:
-
+    HeapTimer() = default;
     void Extend(int id, std::chrono::milliseconds timeout) {
         heap_[ref_[id]].expire_time = Clock::now() + timeout;
         ShiftDown(ref_[id]);
@@ -50,6 +50,11 @@ public:
         DelByIndex(index);
         ref_.erase(id);
     }
+
+    HeapTimer(const HeapTimer&) = delete;
+    HeapTimer& operator=(const HeapTimer&) = delete;
+    HeapTimer(HeapTimer&&) = delete;
+    HeapTimer& operator=(HeapTimer&&) = delete;
 private:
     void DelByIndex(size_t index) {
         if (index < heap_.size() - 1) {
