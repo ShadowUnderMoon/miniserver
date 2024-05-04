@@ -84,33 +84,30 @@ private:
         }
     }
     // index starts from 0, if child's index is i, then parent's index is (i - 1) / 2
+    // instead, index start from 1, if child's index is i, then parent's index is i / 2
+    // because (i - 1) / 2 , if i == 0, then underflow/overflow
     void ShiftUp(size_t index) {
-        size_t child = index;
-        size_t parent = (child - 1) / 2;
-        while (parent >= 0) {
-            if (heap_[parent] < heap_[child]) {
-                break;
-            }
-            SwapNode(child, parent);
-            child = parent;
-            parent = (child - 1) / 2;
+        size_t x = index + 1;
+        while (x > 1 && heap_[x] < heap_[x / 2]) {
+            SwapNode(x -1 , x / 2 - 1);
+            x  = x / 2;
         }
     }
     // index starts from 0, if parent's index is j, then children's indices are (2i + 1), (2i + 2)
+    // instead index starts from 1, is parent's index is j, then children's indices are (2i), (2i + 1)
     void ShiftDown(size_t index) {
-        size_t parent = index;
-        size_t child = parent * 2 + 1;
+        size_t x = index + 1;
         size_t n = heap_.size();
-        while (child < n) {
-            if (child + 1 < n && heap_[child + 1] < heap_[child]) {
-                child++;
+        while (x * 2 <= n) {
+            size_t t = x * 2;
+            if (t + 1 <= n && heap_[t] < heap_[t - 1]) {
+                t++;
             }
-            if (heap_[parent] < heap_[child]) {
+            if (!(heap_[t - 1] < heap_[x - 1])) {
                 break;
             }
-            SwapNode(parent, child);
-            parent = child;
-            child = parent * 2 + 1;
+            SwapNode(x - 1, t - 1);
+            x = t;
         }
     }
 
