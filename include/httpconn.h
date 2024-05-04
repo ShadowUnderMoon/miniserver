@@ -8,6 +8,7 @@
 #include <spdlog/spdlog.h>
 #include <buffer.h>
 #include <httpresponse.h>
+#include <unistd.h>
 class HttpConn {
 
 public:
@@ -28,19 +29,14 @@ public:
         return iov_[0].iov_len + iov_[1].iov_len;
     }
 
-    size_t Write() {
+    ssize_t Write(int& error_no) {
         ssize_t len = -1;
-        do {
-            if (iov_[0].iov_len + iov_[1].iov_len == 0) {
-                break;
-            }
+        while (ToWriteBytes() > 0) {
             len = writev(sock_->get(), iov_, iov_cnt_);
             // SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), "len: {}", len);
             if (len <= 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    break;
-                }
-                throw std::system_error(errno,std::generic_category());
+                error_no = errno;
+                return len;
             }
             if (len > iov_[0].iov_len) {
                 iov_[1].iov_base = (uint8_t*)iov_[1].iov_base +  (len - iov_[0].iov_len);
@@ -56,8 +52,7 @@ public:
                 write_buff_.Retrieve(len);
             }
             // SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), "iov0: {}, iov1: {}", iov_[0].iov_len, iov_[1].iov_len);
-        } while (isET || ToWriteBytes() > 10240);
-
+        }
         return len;
     }
 

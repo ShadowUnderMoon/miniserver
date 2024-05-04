@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cerrno>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -244,16 +245,19 @@ class WebServer {
     }
 
     void OnWrite(HttpConn &client) {
-        client.Write();
-        if (client.ToWriteBytes() == 0) {
-            if (client.IsKeepAlive()) {
-                OnProcess(client);
-                return;
+        int error_no = 0;
+        auto ret = client.Write(error_no);
+        if (ret < 0) {
+            if (error_no == EAGAIN || error_no == EWOULDBLOCK) {
+                epoller_.ModFd(client.GetFd(), conn_event_ | EPOLLOUT);
+            } else {
+                CloseConn(client.GetFd());
             }
+        } else if (client.IsKeepAlive()) {
+            epoller_.ModFd(client.GetFd(), conn_event_ | EPOLLIN);
+        } else {
             CloseConn(client.GetFd());
-            return;
         }
-        epoller_.ModFd(client.GetFd(), conn_event_ | EPOLLOUT);
     }
 
   private:
