@@ -45,6 +45,9 @@ public:
         return false;
     }
 
+    auto state() const {
+        return state_;
+    }
     HTTP_CODE Parse(Buffer &buff) {
         const std::string CRLF = "\r\n";
 

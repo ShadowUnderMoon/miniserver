@@ -61,6 +61,9 @@ public:
     }
 
     bool Process() {
+        if (request_.state() == HttpRequest::REQUEST_STATE::REQUEST_FINISH) {
+            request_.Init();
+        }
         auto parse_status = request_.Parse(read_buff_);
         if (parse_status == HttpRequest::HTTP_CODE::GET_REQUEST) {
             SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), request_.path());
