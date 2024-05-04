@@ -1,5 +1,6 @@
 #pragma once
 #include "sqlconnpool.h"
+#include <cassert>
 #include <regex>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -44,44 +45,61 @@ public:
         return false;
     }
 
-    bool Parse(Buffer& buff) {
-        const char CRLF[] = "\r\n";
-        if (buff.ReadableBytes() <= 0) {
-            return false;
-        }
+    HTTP_CODE Parse(Buffer &buff) {
+        const std::string CRLF = "\r\n";
 
         while (buff.ReadableBytes() && state_ != REQUEST_STATE::REQUEST_FINISH) {
-            const char* line_end = std::search(buff.Peak(), buff.BeginWrite(), CRLF, CRLF + 2);
-            std::string line(buff.Peak(), line_end);
-            SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), line);
-            switch (state_) {
-            case REQUEST_STATE::REQUEST_LINE:
-                if (!ParseRequestLine(line)) {
-                    return false;
+            if (state_ != REQUEST_STATE::REQUEST_BODY) {
+                const char *line_end = std::search(
+                    buff.Peak(), buff.BeginWrite(), CRLF.begin(), CRLF.end());
+                if (line_end == buff.BeginWrite()) {
+                    return HTTP_CODE::NO_REQUEST;
                 }
-                ParsePath();
-                break;
-            case REQUEST_STATE::REQUEST_HEADERS:
-                ParseHeader(line);
-                if (buff.ReadableBytes() <= 2) {
-                    state_ = REQUEST_STATE::REQUEST_FINISH;
+                std::string line(buff.Peak(), line_end);
+                SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), line);
+                if (state_ == REQUEST_STATE::REQUEST_LINE) {
+                    if (!ParseRequestLine(line)) {
+                        return HTTP_CODE::BAD_REQUEST;
+                    }
+                    ParsePath();
+                } else {
+                    assert(state_ == REQUEST_STATE::REQUEST_HEADERS);
+                    if (line.empty()) {
+                        if (method_ == "GET") {
+                            state_ = REQUEST_STATE::REQUEST_FINISH;
+                        } else if (method_ == "POST") {
+                            state_ = HttpRequest::REQUEST_STATE::REQUEST_BODY;
+                        } else {
+                            SPDLOG_LOGGER_ERROR(spdlog::get("miniserver"), "unknown request method: {}", method_);
+                            return HttpRequest::HTTP_CODE::BAD_REQUEST;
+                        }
+                    } else {
+                        if (!ParseHeader(line)) {
+                            return HTTP_CODE::BAD_REQUEST;
+                        }
+                    }
                 }
-                break;
-            case REQUEST_STATE::REQUEST_BODY:
-                ParseBody(line);
-                break;
-            default:
-                break;
+                buff.RetrieveUntil(line_end + 2);
+            } else {
+                assert(method_ == "POST");
+                if (!header_.contains("Content-Length")) {
+                    return HTTP_CODE::BAD_REQUEST;
+                }
+                auto len = std::stoll(header_["Content-Length"]);
+                if (buff.ReadableBytes() < len) {
+                    return HTTP_CODE::NO_REQUEST;
+                }
+                std::string body(buff.Peak(), buff.Peak() + len);
+                ParseBody(std::move(body));
+                buff.RetrieveUntil(buff.Peak() + len);
             }
-            if (line_end == buff.BeginWrite()) {
-                break;
-            }
-            buff.RetrieveUntil(line_end + 2);
         }
-        
-        return true;
-    }
 
+        if (state_ == REQUEST_STATE::REQUEST_FINISH) {
+            return HTTP_CODE::GET_REQUEST;
+        }
+        return HTTP_CODE::NO_REQUEST;
+    }
 
     void ParsePath() {
         if (path_ == "/") {
@@ -111,18 +129,18 @@ public:
         return false;
     }
 
-    void ParseHeader(const std::string& line) {
+    bool ParseHeader(const std::string& line) {
         std::regex pattern("^([^:]*): ?(.*)$");
         std::smatch sub_match;
         if (std::regex_match(line, sub_match, pattern)) {
             header_[sub_match[1]] = sub_match[2];
-        } else {
-            state_ = REQUEST_STATE::REQUEST_BODY;
+            return true;
         }
+        return false;
     }
 
-    void ParseBody(const std::string& line) {
-        body_ = line;
+    void ParseBody(std::string body) {
+        body_ = std::move(body);
         ParsePost();
         state_ = REQUEST_STATE::REQUEST_FINISH;
     }

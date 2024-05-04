@@ -61,13 +61,12 @@ public:
     }
 
     bool Process() {
-        request_.Init();
-        if (read_buff_.ReadableBytes() == 0) {
-            return false;
-        }
-        if (request_.Parse(read_buff_)) {
+        auto parse_status = request_.Parse(read_buff_);
+        if (parse_status == HttpRequest::HTTP_CODE::GET_REQUEST) {
             SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), request_.path());
             response_.Init(src_dir, request_.path(), request_.IsKeepAlive(), 200);
+        } else if (parse_status == HttpRequest::HTTP_CODE::NO_REQUEST) {
+            return false;
         } else {
             response_.Init(src_dir, request_.path(), false, 400);
         }
