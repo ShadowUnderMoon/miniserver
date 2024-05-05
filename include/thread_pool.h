@@ -1,12 +1,16 @@
 #pragma once
 
+#include <notify_event_fd.h>
+#include <epoller.h>
+#include <threadsafe_queue.h>
+#include <sys/eventfd.h>
 #include <cassert>
 #include <cstddef>
 #include <functional>
 #include <mpmc_blocking_q.h>
 #include <stdexcept>
 #include <thread>
-
+#include <vector>
 enum class async_overflow_policy {
     block,
     overrun_oldest,
@@ -31,6 +35,49 @@ public:
         : task(std::move(task)) {}
     explicit async_msg(async_msg_type the_type)
         : msg_type(the_type) {}
+};
+
+class WorkerThread {
+public:
+    WorkerThread(std::function<void(void)> func)
+        : thread_(func) {}
+
+    WorkerThread(const WorkerThread&) = delete;
+    WorkerThread& operator=(const WorkerThread&) = delete;
+    WorkerThread(WorkerThread&&) = default;
+    WorkerThread& operator=(WorkerThread&&) = default;
+private:
+    std::jthread thread_;
+    NotifyEventFd notify_event_fd_;
+    threadsafe_queue<async_msg> conn_queue_;
+    Epoller epller_;
+};
+
+class WorkerThreadPool {
+public:
+    WorkerThreadPool(size_t threads_n,
+                const std::function<void()>& on_thread_start,
+                const std::function<void()>& on_thread_stop)
+    {
+        if (threads_n == 0 || threads_n > 1000) {
+            throw std::runtime_error("invalid threads_n params (range is 1-1000)");
+        }
+        for (size_t i = 0; i < threads_n; i++) {
+            worker_threads_.emplace_back([] () {});
+        }
+    }
+    
+    explicit WorkerThreadPool(size_t threads_n)
+        : WorkerThreadPool(threads_n, [] {}, [] {}) {}
+    
+    ~WorkerThreadPool() {
+
+    }
+
+    WorkerThreadPool(const WorkerThreadPool &) = delete;
+    WorkerThreadPool& operator=(WorkerThreadPool &&) = delete;
+private:
+    std::vector<WorkerThread> worker_threads_;
 };
 
 class thread_pool {
