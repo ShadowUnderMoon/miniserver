@@ -1,4 +1,5 @@
 #pragma once
+#include <arpa/inet.h>
 #include <asm-generic/socket.h>
 #include <fcntl.h>
 #include <netinet/in.h> // For sockaddr_in
@@ -6,6 +7,18 @@
 #include <sys/socket.h> // For socket, bind, listen, accept
 #include <system_error>
 #include <unistd.h> // For close()
+
+struct Connection
+{
+    int fd;
+    struct sockaddr_in addr;
+};
+
+static std::string sockaddrToString(const struct sockaddr_in &addr) {
+    char ipstr[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(addr.sin_addr), ipstr, INET_ADDRSTRLEN);
+    return std::string(ipstr);
+}
 
 class ServerSocket {
 private:

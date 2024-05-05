@@ -53,8 +53,8 @@ public:
 
     HeapTimer(const HeapTimer&) = delete;
     HeapTimer& operator=(const HeapTimer&) = delete;
-    HeapTimer(HeapTimer&&) = delete;
-    HeapTimer& operator=(HeapTimer&&) = delete;
+    HeapTimer(HeapTimer&&) = default;
+    HeapTimer& operator=(HeapTimer&&) = default;
 private:
     void DelByIndex(size_t index) {
         if (index < heap_.size() - 1) {

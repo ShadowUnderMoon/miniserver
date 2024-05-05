@@ -29,6 +29,9 @@ public:
         }
     }
 
+    int Get() {
+        return notify_event_fd_;
+    }
 private:
     int notify_event_fd_ = -1;
 };
