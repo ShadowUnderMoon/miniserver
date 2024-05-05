@@ -1,8 +1,10 @@
 #pragma once
 
+#include <logger.h>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <spdlog/spdlog.h>
 #include <sys/epoll.h>
 #include <system_error>
 #include <unistd.h>
@@ -12,11 +14,19 @@ class Epoller {
 public:
     explicit Epoller(int maxEvent = 1024): events_(maxEvent) {
         epoll_fd_ = epoll_create1(0);
+        SPDLOG_LOGGER_DEBUG(logger, "Epoller create: {}", epoll_fd_);
         if (epoll_fd_ < 0) {
             throw std::system_error(errno, std::generic_category());
         }
     }
+
+    Epoller(const Epoller&) = delete;
+    Epoller& operator=(const Epoller&) = delete;
+    Epoller(Epoller&&) = default;
+    Epoller& operator=(Epoller&&) = default;
+
     ~Epoller() {
+        SPDLOG_LOGGER_DEBUG(logger, "Epoller close: {}", epoll_fd_);
         close(epoll_fd_);
     }
 

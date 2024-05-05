@@ -7,7 +7,7 @@
 #include <sys/socket.h> // For socket, bind, listen, accept
 #include <system_error>
 #include <unistd.h> // For close()
-
+#include <logger.h>
 struct Connection
 {
     int fd;
@@ -53,7 +53,7 @@ public:
     }
 
     ~ServerSocket() {
-        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "close socket: {}", sockfd);
+        SPDLOG_LOGGER_INFO(logger, "close socket: {}", sockfd);
         Close();
     }
 
@@ -66,7 +66,7 @@ public:
                 }
             }
             catch (const std::system_error& ex) {
-                 SPDLOG_LOGGER_ERROR(spdlog::get("miniserver"), "{}, {}", ex.code().value(), ex.what());
+                 SPDLOG_LOGGER_ERROR(logger, "{}, {}", ex.code().value(), ex.what());
             }
             sockfd = -1;
         }

@@ -11,6 +11,7 @@
 #include <http_constants.h>
 #include <unistd.h>
 #include <utils.h>
+#include <logger.h>
 class HttpResponse {
 public:
     HttpResponse() {}
@@ -56,7 +57,7 @@ public:
 
     void ErrorHtml() {
         if (ERRORCODE_PATH.contains(code_)) {
-            SPDLOG_LOGGER_WARN(spdlog::get("miniserver"), "ERRORHTML");
+            SPDLOG_LOGGER_WARN(logger, "ERRORHTML");
             path_ = ERRORCODE_PATH.at(code_);
             stat((src_dir_ + path_).data(), &mm_file_stat_);
         }
@@ -65,7 +66,7 @@ public:
     void AddStatusLine(Buffer& buff) {
         std::string status_text{getHTTPStatusText(code_)};
         status_text = "HTTP/1.1 " + std::to_string(code_) + " "+ status_text + "\r\n";
-        SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), EscapeString(status_text));
+        SPDLOG_LOGGER_DEBUG(logger, EscapeString(status_text));
         buff.Append(status_text);
     }
 
@@ -80,7 +81,7 @@ public:
         }
 
         header += "Content-type: " + GetFileType() + "\r\n";
-        SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), EscapeString(header));
+        SPDLOG_LOGGER_DEBUG(logger, EscapeString(header));
         buff.Append(header);
     }
 
@@ -100,7 +101,7 @@ public:
         mm_file_ = (char*) mmret;
         close(src_fd);
         std::string header = "Content-length: " + std::to_string(mm_file_stat_.st_size) + "\r\n\r\n"; 
-        SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), EscapeString(header));
+        SPDLOG_LOGGER_DEBUG(logger, EscapeString(header));
         buff.Append(header);
     }
     std::string GetFileType() {

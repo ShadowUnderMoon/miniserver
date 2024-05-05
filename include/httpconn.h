@@ -9,6 +9,7 @@
 #include <buffer.h>
 #include <httpresponse.h>
 #include <unistd.h>
+#include <logger.h>
 class HttpConn {
 
 public:
@@ -33,7 +34,7 @@ public:
         ssize_t len = -1;
         while (ToWriteBytes() > 0) {
             len = writev(sock_->get(), iov_, iov_cnt_);
-            // SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), "len: {}", len);
+            // SPDLOG_LOGGER_DEBUG(logger, "len: {}", len);
             if (len <= 0) {
                 error_no = errno;
                 return len;
@@ -45,13 +46,13 @@ public:
                     write_buff_.RetrieveAll();
                     iov_[0].iov_len = 0;
                 }
-                // SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), "*: {}, len: {}", iov_[1].iov_base, iov_[1].iov_len);
+                // SPDLOG_LOGGER_DEBUG(logger, "*: {}, len: {}", iov_[1].iov_base, iov_[1].iov_len);
             } else {
                 iov_[0].iov_base = (uint8_t*)iov_[0].iov_base + len;
                 iov_[0].iov_len -= len;
                 write_buff_.Retrieve(len);
             }
-            // SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), "iov0: {}, iov1: {}", iov_[0].iov_len, iov_[1].iov_len);
+            // SPDLOG_LOGGER_DEBUG(logger, "iov0: {}, iov1: {}", iov_[0].iov_len, iov_[1].iov_len);
         }
         return len;
     }
@@ -66,7 +67,7 @@ public:
         }
         auto parse_status = request_.Parse(read_buff_);
         if (parse_status == HttpRequest::HTTP_CODE::GET_REQUEST) {
-            SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), request_.path());
+            SPDLOG_LOGGER_INFO(logger, request_.path());
             response_.Init(src_dir, request_.path(), request_.IsKeepAlive(), 200);
         } else if (parse_status == HttpRequest::HTTP_CODE::NO_REQUEST) {
             return false;
@@ -85,7 +86,7 @@ public:
             iov_[1].iov_len = response_.FileLen();
             iov_cnt_ = 2;
         }
-        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "filesize: {}, iovCnt: {}, Total: {} Bytes", response_.FileLen(), iov_cnt_, ToWriteBytes());
+        SPDLOG_LOGGER_INFO(logger, "filesize: {}, iovCnt: {}, Total: {} Bytes", response_.FileLen(), iov_cnt_, ToWriteBytes());
         return true;
     }
 
@@ -94,7 +95,7 @@ public:
             return false;
         }
         std::string read_data = read_buff_.RetrieveAllToStr();
-        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), EscapeString(read_data));
+        SPDLOG_LOGGER_INFO(logger, EscapeString(read_data));
         write_buff_.Append(read_data);    
         iov_[0].iov_base = const_cast<char*>(write_buff_.Peak());
         iov_[0].iov_len = write_buff_.ReadableBytes();

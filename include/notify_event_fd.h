@@ -1,5 +1,7 @@
 #pragma once
+#include <logger.h>
 #include <cstdint>
+#include <spdlog/spdlog.h>
 #include <sys/eventfd.h>
 #include <system_error>
 #include <unistd.h>
@@ -8,6 +10,7 @@ class NotifyEventFd
 public:
     NotifyEventFd() {
         notify_event_fd_ = eventfd(0, 0);
+        SPDLOG_LOGGER_DEBUG(logger, "Notify Event Fd create: {}", notify_event_fd_);
         if (notify_event_fd_ < 0) {
             throw std::system_error(errno, std::generic_category());
         }
@@ -31,6 +34,11 @@ public:
 
     int Get() {
         return notify_event_fd_;
+    }
+
+    ~NotifyEventFd() {
+        SPDLOG_LOGGER_DEBUG(logger, "Notify Event Fd close: {}", notify_event_fd_);
+        close(notify_event_fd_);
     }
 private:
     int notify_event_fd_ = -1;

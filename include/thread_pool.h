@@ -46,9 +46,13 @@ public:
 
 class ServerHandler {
 public:
-
+    ServerHandler() = default;
+    ServerHandler(const ServerHandler&) = delete;
+    ServerHandler& operator=(const ServerHandler&) = delete;
+    ServerHandler(ServerHandler&&) = default;
+    ServerHandler& operator=(ServerHandler&&) = default;
     void Start() {
-       logger->info("Worker Start!");
+       SPDLOG_LOGGER_INFO(logger, "Worker Start!");
         while (true) {
             int timeMs = Setting::GetInstance().timeout == std::chrono::milliseconds(0) ? -1 : timer.GetNextTick(); 
             int eventCnt = epoller.Wait(timeMs);
@@ -59,19 +63,19 @@ public:
                 int fd = epoller.GetEventFd(i);
                 uint32_t events = epoller.GetEvents(i);
                 if (fd == notify_event_fd.Get()) {
-                    logger->info("Notify Event");
+                    SPDLOG_LOGGER_INFO(logger, "Notify Event");
                     DealNotify();
                 } else if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
                     assert(user.contains(fd));
-                    logger->info( "ERROR/CLOSE EVENT: {}", fd);
+                    SPDLOG_LOGGER_INFO(logger,  "ERROR/CLOSE EVENT: {}", fd);
                     CloseConn(fd);
                 } else if (events & EPOLLIN) {
                     assert(user.contains(fd));
-                    logger->info("READ EVENT: {}", fd);
+                    SPDLOG_LOGGER_INFO(logger, "READ EVENT: {}", fd);
                     DealRead(fd);
                 } else if (events & EPOLLOUT) {
                     assert(user.contains(fd));
-                    logger->info("WRITE EVENT: {}", fd);
+                    SPDLOG_LOGGER_INFO(logger, "WRITE EVENT: {}", fd);
                     DealWrite(fd);
                 } else {
                     logger->error("Unexpected event");
@@ -97,7 +101,7 @@ public:
         if (Setting::GetInstance().timeout > std::chrono::milliseconds(0)) {
             timer.Add(client_fd, Setting::GetInstance().timeout, [this, client_fd] { CloseConn(client_fd); });
         }
-        logger->info("Client {}:{} in", client_fd, sockaddrToString(client_addr));
+        SPDLOG_LOGGER_INFO(logger, "Client {}:{} in", client_fd, sockaddrToString(client_addr));
     }
 
     void CloseConn(int fd) {
@@ -169,9 +173,9 @@ public:
         if (threads_n == 0 || threads_n > 1000) {
             throw std::runtime_error("invalid threads_n params (range is 1-1000)");
         }
+        worker_threads.resize(threads_n);
         for (size_t i = 0; i < threads_n; i++) {
-            worker_threads.emplace_back();
-            auto& current_worker = worker_threads.back();
+            auto& current_worker = worker_threads[i];
             current_worker.serverhandler.epoller.AddFd(current_worker.serverhandler.notify_event_fd.Get(), EPOLLIN);
             current_worker.thread = std::jthread([&current_worker, on_thread_start, on_thread_stop] () {
                 on_thread_start();

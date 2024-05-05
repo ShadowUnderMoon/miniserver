@@ -9,6 +9,7 @@
 #include <buffer.h>
 #include <algorithm>
 #include <http_constants.h>
+#include <logger.h>
 class HttpRequest {
 public:
 
@@ -59,7 +60,7 @@ public:
                     return HTTP_CODE::NO_REQUEST;
                 }
                 std::string line(buff.Peak(), line_end);
-                SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), line);
+                SPDLOG_LOGGER_DEBUG(logger, line);
                 if (state_ == REQUEST_STATE::REQUEST_LINE) {
                     if (!ParseRequestLine(line)) {
                         return HTTP_CODE::BAD_REQUEST;
@@ -73,7 +74,7 @@ public:
                         } else if (method_ == "POST") {
                             state_ = HttpRequest::REQUEST_STATE::REQUEST_BODY;
                         } else {
-                            SPDLOG_LOGGER_ERROR(spdlog::get("miniserver"), "unknown request method: {}", method_);
+                            SPDLOG_LOGGER_ERROR(logger, "unknown request method: {}", method_);
                             return HttpRequest::HTTP_CODE::BAD_REQUEST;
                         }
                     } else {
@@ -128,7 +129,7 @@ public:
             state_ = REQUEST_STATE::REQUEST_HEADERS;
             return true;
         }
-        SPDLOG_LOGGER_ERROR(spdlog::get("miniserver"), "RequestLine Error");
+        SPDLOG_LOGGER_ERROR(logger, "RequestLine Error");
         return false;
     }
 
@@ -200,7 +201,7 @@ public:
     }
 
     static bool UserVerify(const std::string& name, const std::string& pwd, bool isLogin) {
-        SPDLOG_LOGGER_DEBUG(spdlog::get("miniserver"), "name: {}, password: {}", name, pwd);
+        SPDLOG_LOGGER_DEBUG(logger, "name: {}, password: {}", name, pwd);
         if (name.empty() || pwd.empty()) {
             return false;
         }
@@ -211,7 +212,7 @@ public:
 
         if (result.num_rows() == 1) {
             if (!isLogin) {
-                SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "User exsited");
+                SPDLOG_LOGGER_INFO(logger, "User exsited");
                 return false;
             }
             mysqlpp::Row row = result[0];
@@ -220,21 +221,21 @@ public:
             if (password == pwd) {
                 return true;
             }
-            SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "password incorrect");
+            SPDLOG_LOGGER_INFO(logger, "password incorrect");
             return false;
         }
         if (isLogin) {
-            SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "NOT FOUND");
+            SPDLOG_LOGGER_INFO(logger, "NOT FOUND");
             return false;
         }
 
         query << "INSERT INTO user(username, password) VALUES(" << mysqlpp::quote << name
                 << ", " << mysqlpp::quote << pwd << ")";
         if (query.execute()) {
-            SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "DB writed");
+            SPDLOG_LOGGER_INFO(logger, "DB writed");
             return true;
         }
-        SPDLOG_LOGGER_INFO(spdlog::get("miniserver"), "DB write failed");
+        SPDLOG_LOGGER_INFO(logger, "DB write failed");
         return false;
     }
     const std::string& path() const {
