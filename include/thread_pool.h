@@ -1,11 +1,13 @@
 #pragma once
 #include "socket_descriptor.h"
+#include <cerrno>
 #include <httpconn.h>
 #include <setting.h>
 #include <logger.h>
 #include <heaptimer.h>
 #include <notify_event_fd.h>
 #include <epoller.h>
+#include <spdlog/spdlog.h>
 #include <sys/epoll.h>
 #include <threadsafe_queue.h>
 #include <sys/eventfd.h>
@@ -97,7 +99,7 @@ public:
         auto sock = std::make_unique<ServerSocket>(client_fd);
         sock->setNonblock();
         epoller.AddFd(client_fd, Setting::GetInstance().conn_event | EPOLLIN);
-        user.emplace(client_fd, HttpConn(std::move(sock), client_addr));
+        user[client_fd].Init(std::move(sock), client_addr);
         if (Setting::GetInstance().timeout > std::chrono::milliseconds(0)) {
             timer.Add(client_fd, Setting::GetInstance().timeout, [this, client_fd] { CloseConn(client_fd); });
         }
@@ -117,7 +119,12 @@ public:
             timer.Extend(fd, Setting::GetInstance().timeout);
         }
         auto& client = user[fd];
-        client.Read();
+        int read_errno = 0;
+        auto ret = client.Read(read_errno);
+        if (ret <= 0 && (read_errno != EAGAIN || read_errno != EWOULDBLOCK)) {
+            CloseConn(fd);
+            return;
+        }
         if (client.Process()) {
             epoller.ModFd(client.GetFd(), Setting::GetInstance().conn_event | EPOLLOUT);
         } else {

@@ -40,10 +40,7 @@ public:
     }
 
     bool IsKeepAlive() const {
-        if (header_.contains("Connection")) {
-            return header_.at("Connection") == "keep-alive" && version_ == "1.1";
-        }
-        return false;
+        return version_ == "1.1" || header_.contains("Connection") && header_.at("Connection") == "keep-alive";
     }
 
     auto state() const {

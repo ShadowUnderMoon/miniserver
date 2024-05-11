@@ -28,7 +28,6 @@ public:
         std::chrono::seconds db_max_idle_time,
         int db_initial_connections,
         int db_max_connections,
-        int connPoolNum,
         int num_threads,
         bool openLog,
         spdlog::level::level_enum logLevel,
@@ -47,7 +46,6 @@ public:
         this->db_max_idle_time = db_max_idle_time;
         this->db_initial_connections = db_initial_connections;
         this->db_max_connections = db_max_connections;
-        this->connPoolNum = connPoolNum;
         this->num_threads = num_threads;
         this->openLog = openLog;
         this->logLevel = logLevel;
@@ -78,7 +76,6 @@ public:
     std::chrono::seconds db_max_idle_time;
     int db_initial_connections;
     int db_max_connections;
-    int connPoolNum;
     int num_threads;
     bool openLog;
     spdlog::level::level_enum logLevel;
@@ -86,6 +83,7 @@ public:
     uint32_t listen_event;
     uint32_t conn_event;
     const int MaxFd = 65536;
+    const int backlog = 10000;
 private:
     Setting() = default;
 };

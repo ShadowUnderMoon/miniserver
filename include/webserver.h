@@ -20,6 +20,7 @@
 #include <spdlog/common.h>
 #include <spdlog/logger.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/spdlog.h>
 #include <sqlconnpool.h>
 #include <string>
 #include <sys/epoll.h>
@@ -35,7 +36,7 @@ class WebServer {
         HttpConn::isET = Setting::GetInstance().isET;
         listen_sock_ =
             std::make_unique<ServerSocket>(ServerSocket::get_new_scoket());
-        listen_sock_->listenTo(setting.port, 10);
+        listen_sock_->listenTo(setting.port, setting.backlog);
 
         epoller_.AddFd(listen_sock_->get(), setting.listen_event);
 
@@ -57,7 +58,7 @@ class WebServer {
             "logLevel: {}, logQueueSize: {}",
             magic_enum::enum_name(logger->level()), setting.logQueSize);
         SPDLOG_LOGGER_INFO(logger, 
-            "SqlConnPool: {}, ThreadPoolNum: {}", setting.connPoolNum,
+            "SqlConnPool: {}, ThreadPoolNum: {}", setting.db_initial_connections,
             setting.num_threads);
     }
 
@@ -90,11 +91,16 @@ class WebServer {
                 &client_addr_len);
             if (client_fd < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) { return; }
+                if (errno == EMFILE) {
+                    SPDLOG_LOGGER_ERROR(logger, "The per process limit on the number of open file descriptors has been reached");
+                    return;
+                }
                 throw std::system_error(errno, std::generic_category());
             }
             if (HttpConn::user_count >= Setting::GetInstance().MaxFd) {
-                SPDLOG_LOGGER_INFO(logger, "Client if full!");
-                SendError(client_fd, "Server Busy!");
+                SPDLOG_LOGGER_INFO(logger, "Client is full!");
+                ServerBusy(client_fd);
+                close(client_fd);
                 return;
             }
             DispatchConnNew({client_fd, client_addr});
@@ -114,8 +120,26 @@ class WebServer {
         last_thread_ = tid;
         return tid;
     }
-    void SendError(int fd, const std::string &info) {
-        size_t ret = send(fd, info.data(), info.length(), 0);
+    void ServerBusy(int fd) {
+
+        std::string response =  "HTTP/1.1 503 Service Unavailable\r\n"
+                                "Content-Type: text/html; charset=utf-8\r\n"
+                                "Connection: close\r\n"
+                                "\r\n"
+                                "<!DOCTYPE html>\r\n"
+                                "<html lang=\"en\">\r\n"
+                                "<head>\r\n"
+                                "    <meta charset=\"UTF-8\">\r\n"
+                                "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n"
+                                "    <title>Service Unavailable</title>\r\n"
+                                "</head>\r\n"
+                                "<body>\r\n"
+                                "    <h1>503 Service Unavailable</h1>\r\n"
+                                "    <p>The server is currently unable to handle the request due to a temporary overload or maintenance of the server. Please try again later.</p>\r\n"
+                                "</body>\r\n"
+                                "</html>\r\n";
+
+        size_t ret = send(fd, response.data(), response.length(), 0);
         if (ret < 0) { logger->error("send error to client [{}] error!", fd); }
     }
 

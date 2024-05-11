@@ -14,7 +14,10 @@ class HttpConn {
 
 public:
     HttpConn() = default;
-    HttpConn(std::unique_ptr<ServerSocket> sock, sockaddr_in addr) : sock_(std::move(sock)), addr_(addr) {
+
+    void Init(std::unique_ptr<ServerSocket> sock, sockaddr_in addr) {
+        sock_ = std::move(sock);
+        addr = addr;
         user_count++;
     }
 
@@ -22,8 +25,8 @@ public:
     HttpConn& operator=(const HttpConn&) = delete;
     HttpConn(HttpConn&&) = default;
     HttpConn& operator=(HttpConn&&) = default;
-    ssize_t Read() {
-        return read_buff_.ReadFd(sock_->get());
+    ssize_t Read(int& read_errno) {
+        return read_buff_.ReadFd(sock_->get(), read_errno);
     }
 
     size_t ToWriteBytes() {

@@ -76,10 +76,10 @@ public:
         writerIndex_ += len;
     }
 
-    ssize_t ReadFd(int fd) {
+    ssize_t ReadFd(int fd, int& read_errno) {
         char extrabuff[65536];
         struct iovec iov[2];
-        ssize_t total = 0;
+        ssize_t len = 0;
         while (true) {
             size_t writable = writableBytes();
             iov[0].iov_base = buffer_.data() + writerIndex_;
@@ -89,11 +89,12 @@ public:
 
             ssize_t len = readv(fd, iov, 2);
 
+            if (len == 0) {
+                break;
+            }
             if (len < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    break;
-                }
-                throw std::system_error(errno,std::generic_category());
+                read_errno = errno;
+                break;
             }
 
             if (static_cast<size_t>(len) <= writable) {
@@ -102,9 +103,8 @@ public:
                 writerIndex_ = buffer_.size();
                 Append(extrabuff, len - writable);
             }
-            total += len;
         }
-        return total;
+        return len;
     }
 // private:
     std::vector<char> buffer_;
