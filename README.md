@@ -102,7 +102,7 @@ echo 10000 > /proc/sys/net/core/somaxconn
 ```shell
 echo 10000 | sudo tee /proc/sys/net/ipv4/tcp_max_syn_backlog
 echo 10000 | sudo tee /proc/sys/net/core/somaxconn
-```可以看到QPS可以达到十万的量级
+```
 
 这一步的目的是让程序不会因为半连接队列或者全连接队列的容量有效，而导致堵塞。
 `ulimit`的设置只在当前shell中有效，内核参数的设置只在这次会话中有效，重启后失效。
@@ -395,7 +395,7 @@ HTTP_CODE Parse(Buffer &buff) {
                     if (!ParseHeader(line)) {
                         return HTTP_CODE::BAD_REQUEST;
                     }
-                }
+                }``可以看到QPS可以达到十万
             }
             buff.RetrieveUntil(line_end + 2);
         } else {
