@@ -71,6 +71,67 @@ cmkae --build build --parallel
 
 使用浏览器等连接到 `http://127.0.0.1:8888/`。
 
+## 压力测试
+
+压力测试使用的平台为
+CPU: AMD Ryzen 9 5900X (24) @ 3.700GHz
+内存: 64GB
+OS: Arch Linux x86_64
+Kernel: 6.8.9-arch1-2
+
+### 修改系统设置
+
+放开程序能够打开的文件描述符的限制
+
+```shell
+ulimit -n unlimited
+```
+
+修改内核参数 `tcp_max_syn_backlog` 和 `somaxconn`，并在程序中将 `backlog`的值调大，
+
+```shell
+echo 10000 > /proc/sys/net/ipv4/tcp_max_syn_backlog
+echo 10000 > /proc/sys/net/core/somaxconn
+```
+
+如果非root用户，可能需要使用下面的方法调大内核参数
+
+```shell
+echo 10000 | sudo tee /proc/sys/net/ipv4/tcp_max_syn_backlog
+echo 10000 | sudo tee /proc/sys/net/core/somaxconn
+```
+
+这一步的目的是让程序不会因为半连接队列或者全连接队列的容量有效，而导致堵塞。
+`ulimit`的设置只在当前shell中有效，内核参数的设置只在这次会话中有效，重启后失效。
+
+### 关闭日志输出
+
+将 src/CmakeLists.txt 中
+
+```shell
+target_compile_definitions(${target_name} PRIVATE SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_DEBUG)
+```
+
+改成
+
+```shell
+target_compile_definitions(${target_name} PRIVATE SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_OFF)
+```
+
+并且在 main.cpp 文件 Setting::GetInstance().Init调用中，将 `openLog` 设置为 `false`。
+
+### 结果
+
+将程序线程数量修改为适合当前平台的数量，本实验中设置为 `12`
+使用`wrk`进行压力测试， wrk通过多线程和epoll多路复用技术实现很高的并发连接数。可以看到QPS可以达到`十万`的量级。
+
+```shell
+wrk -c 10000 -d30s http://127.0.0.1:8888/
+
+```
+
+![pressure test](pressure_test_result.png)
+
 ## 实现细节
 
 ### 多Reactor多线程网络模型
