@@ -129,6 +129,8 @@ target_compile_definitions(${target_name} PRIVATE SPDLOG_ACTIVE_LEVEL=SPDLOG_LEV
 
 使用`wrk`进行压力测试， wrk通过多线程和epoll多路复用技术实现很高的并发连接数。可以看到QPS可以达到`十万`。
 
+此外，可以看到吞吐量已经达到了300 MB/s，相较于常见的千兆宽带（最高125 MB/s）超出一倍。
+
 ```shell
 wrk -c 10000 -d30s http://127.0.0.1:8888/
 
@@ -371,7 +373,7 @@ HTTP_CODE Parse(Buffer &buff) {
             const char *line_end = std::search(
                 buff.Peak(), buff.BeginWrite(), CRLF.begin(), CRLF.end());
             if (line_end == buff.BeginWrite()) {
-                return HTTP_CODE::NO_REQUEST;
+                return HTTP_CODE::NO_REQUEST; 10.28MB
             }
             std::string line(buff.Peak(), line_end);
             SPDLOG_LOGGER_DEBUG(logger, line);
@@ -517,7 +519,7 @@ ssize_t ReadFd(int fd) {
             writerIndex_ = buffer_.size();
             Append(extrabuff, len - writable);
         }
-        total += len;
+        total += len; 10.28MB
     }
     return total;
 }
