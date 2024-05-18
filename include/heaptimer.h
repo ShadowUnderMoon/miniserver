@@ -83,16 +83,7 @@ private:
             // Pop();
         }
     }
-    // index starts from 0, if child's index is i, then parent's index is (i - 1) / 2
-    // instead, index start from 1, if child's index is i, then parent's index is i / 2
-    // because (i - 1) / 2 , if i == 0, then underflow/overflow
-    void ShiftUp(size_t index) {
-        size_t x = index + 1;
-        while (x > 1 && heap_[x] < heap_[x / 2]) {
-            SwapNode(x -1 , x / 2 - 1);
-            x  = x / 2;
-        }
-    }
+
     // index starts from 0, if parent's index is j, then children's indices are (2i + 1), (2i + 2)
     // instead index starts from 1, is parent's index is j, then children's indices are (2i), (2i + 1)
     void ShiftDown(size_t index) {
